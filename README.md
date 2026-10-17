@@ -33,6 +33,67 @@ Certifique-se de ter instalado em sua máquina:
 ### 2. Clonar o repositório
 Abra o terminal e clone o projeto. Em seguida, mude para a branch de desenvolvimento:
 ```bash
-git clone [https://github.com/SeuUsuario/sistema-recomendacao-musical.git](https://github.com/SeuUsuario/sistema-recomendacao-musical.git)
+git clone https://github.com/JoaoAguiar19/Sistema-recomendacao-musical.git
 cd sistema-recomendacao-musical
 git checkout develop
+```
+
+### 3. Subir o Banco de Dados (Docker)
+Na raiz do projeto, execute o comando abaixo para iniciar o contêiner do PostgreSQL:
+```bash
+docker-compose up -d
+```
+### 4. Configurar o Ambiente Python
+Acesse a pasta do backend, crie e ative o ambiente virtual:
+
+Linux/macOS:
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+```
+
+Windows:
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate
+```
+
+### 5. Instalar as Dependências
+Com o ambiente virtual ativado, instale os pacotes necessários:
+```bash
+pip install -r requirements.txt
+```
+
+### 6. Iniciar a API
+Ainda dentro de backend, suba o servidor da aplicação:
+```bash
+uvicorn app.main:app --reload
+```
+
+---
+
+
+## Links úteis após a inicialização:
+
+    Documentação (Swagger): http://127.0.0.1:8000/docs
+
+    Teste de Conexão com DB: http://127.0.0.1:8000/teste-db
+
+7. Encerrar a Aplicação
+```bash
+    Pressione Ctrl + C no terminal da API.
+
+    Desative o ambiente virtual rodando: deactivate
+
+    Na raiz do projeto, desligue o banco de dados: docker-compose down
+```
+
+Observações
+
+    O Docker precisa estar em execução antes de iniciar a API.
+
+    Certifique-se de que o ambiente virtual está ativado antes de rodar qualquer comando do Python/pip.
+
+    Verifique se as variáveis de conexão com o banco no backend correspondem ao docker-compose.yml (normalmente em localhost ou 127.0.0.1).
