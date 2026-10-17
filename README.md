@@ -74,26 +74,24 @@ uvicorn app.main:app --reload
 
 ---
 
-
 ## Links úteis após a inicialização:
 
-    Documentação (Swagger): http://127.0.0.1:8000/docs
+ * Documentação (Swagger): http://127.0.0.1:8000/docs
 
-    Teste de Conexão com DB: http://127.0.0.1:8000/teste-db
+ * Teste de Conexão com DB: http://127.0.0.1:8000/teste-db
 
-7. Encerrar a Aplicação
-```bash
-    Pressione Ctrl + C no terminal da API.
+### 7. Encerrar a Aplicação
 
-    Desative o ambiente virtual rodando: deactivate
+ * Pressione Ctrl + C no terminal da API.
 
-    Na raiz do projeto, desligue o banco de dados: docker-compose down
-```
+ * Desative o ambiente virtual rodando: deactivate
 
-Observações
+ * Na raiz do projeto, desligue o banco de dados: docker-compose down
 
-    O Docker precisa estar em execução antes de iniciar a API.
+### Observações
 
-    Certifique-se de que o ambiente virtual está ativado antes de rodar qualquer comando do Python/pip.
+ * O Docker precisa estar em execução antes de iniciar a API.
 
-    Verifique se as variáveis de conexão com o banco no backend correspondem ao docker-compose.yml (normalmente em localhost ou 127.0.0.1).
+ * Certifique-se de que o ambiente virtual está ativado antes de rodar qualquer comando do Python/pip.
+
+ * Verifique se as variáveis de conexão com o banco no backend correspondem ao docker-compose.yml (normalmente em localhost ou 127.0.0.1).
