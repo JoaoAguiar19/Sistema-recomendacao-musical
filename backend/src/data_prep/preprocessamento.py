@@ -5,7 +5,6 @@ out_path = 'data/processed/dataset_limpo.csv'
 
 df = pd.read_csv(raw_path)
 
-# Limpeza encadeada (mais idiomático em Pandas)
 df_limpo = (
     df.drop(columns=['Unnamed: 0'], errors='ignore')
       .drop_duplicates(subset=['track_id'])

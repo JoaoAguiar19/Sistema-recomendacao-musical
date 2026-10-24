@@ -1,8 +1,10 @@
 import pandas as pd
+import joblib
 from sklearn.preprocessing import MinMaxScaler
 
 in_path = 'data/processed/dataset_limpo.csv'
 out_path = 'data/processed/dataset_normalizado.csv'
+scaler_path = 'data/processed/scaler.pkl'
 
 features = [
     'tempo', 'loudness', 'valence', 'energy', 
@@ -16,6 +18,7 @@ scaler = MinMaxScaler()
 df[features] = scaler.fit_transform(df[features])
 
 df.to_csv(out_path, index=False)
+joblib.dump(scaler, scaler_path)
 
-print(f"Normalização concluída: {out_path}\n")
-print(df[['track_name', 'tempo', 'energy', 'valence']].head())
+print(f"Dataset salvo em: {out_path}")
+print(f"Modelo matemático salvo em: {scaler_path}")
