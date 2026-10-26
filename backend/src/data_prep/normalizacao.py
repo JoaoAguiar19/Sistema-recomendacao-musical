@@ -2,23 +2,27 @@ import pandas as pd
 import joblib
 from sklearn.preprocessing import MinMaxScaler
 
-in_path = 'data/processed/dataset_limpo.csv'
-out_path = 'data/processed/dataset_normalizado.csv'
-scaler_path = 'data/processed/scaler.pkl'
+caminho_entrada = 'data/processed/dataset_limpo.csv'
+caminho_saida = 'data/processed/dataset_normalizado.csv'
+caminho_scaler = 'data/processed/scaler.pkl'
 
-features = [
+features_audio = [
     'tempo', 'loudness', 'valence', 'energy', 
     'danceability', 'speechiness', 'acousticness', 
     'instrumentalness', 'liveness'
 ]
 
-df = pd.read_csv(in_path)
+print("A carregar o dataset limpo...")
+df = pd.read_csv(caminho_entrada)
 
+# Trata valores nulos apenas nas métricas de áudio
+df[features_audio] = df[features_audio].fillna(0.0)
+
+# Normaliza as colunas numéricas mantendo todas as outras intactas (incluindo track_genre)
 scaler = MinMaxScaler()
-df[features] = scaler.fit_transform(df[features])
+df[features_audio] = scaler.fit_transform(df[features_audio])
 
-df.to_csv(out_path, index=False)
-joblib.dump(scaler, scaler_path)
+df.to_csv(caminho_saida, index=False)
+joblib.dump(scaler, caminho_scaler)
 
-print(f"Dataset salvo em: {out_path}")
-print(f"Modelo matemático salvo em: {scaler_path}")
+print(f"Dataset normalizado salvo com as colunas: {list(df.columns)}")
