@@ -4,7 +4,7 @@ import { Search } from "lucide-react";
 import TrackRow from "../components/TrackRow";
 import { tracks } from "../data/tracks";
 
-export default function SearchPage({ onPlay }) {
+export default function SearchPage({ onPlay, likedIds = [], onLike }) {
   const [query, setQuery] = useState("");
 
   const filtered = tracks.filter((track) =>
@@ -22,6 +22,12 @@ export default function SearchPage({ onPlay }) {
       <p className="page-description">
         Encontre uma faixa, artista ou álbum para combinar com seu momento.
       </p>
+
+      {/*{searchTerm && (
+        <h2 className="search-results-title">
+          Resultados para "{searchTerm}"
+        </h2>
+      )}*/}
 
       <label className="search-box">
         <Search size={20} />
@@ -47,8 +53,8 @@ export default function SearchPage({ onPlay }) {
             current={null}
             isPlaying={false}
             onPlay={onPlay}
-            liked={false}
-            onLike={() => {}}
+            liked={likedIds.includes(track.id)}
+            onLike={() => onLike(track.id)}
           />
         ))
       ) : (

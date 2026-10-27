@@ -1,7 +1,6 @@
 
 import { useState } from "react";
 import "./App.css";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import Sidebar from "./components/Sidebar";
 import Player from "./components/Player";
@@ -59,25 +58,10 @@ export default function App() {
 
       <main className="main-area">
         <header className="topbar">
-          <div className="history-buttons">
-            <button
-              aria-label="Voltar"
-              onClick={() => setPage("home")}
-            >
-              <ChevronLeft size={20} />
-            </button>
-
-            <button
-              aria-label="Avançar"
-              onClick={() => setPage("search")}
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
 
           <div className="topbar-right">
             <span className="status-pill">
-              <span /> SUA MÚSICA, SUA VIBE
+              <span /> SUA MÚSICA, SEU ESTILO
             </span>
 
             <button className="profile-small">C</button>

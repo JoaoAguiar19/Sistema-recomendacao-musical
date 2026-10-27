@@ -33,7 +33,7 @@ export default function HomePage({
           </h1>
 
           <p>
-            Encontre a vibe certa para cada momento do seu dia.
+            Encontre a música certa para cada momento do seu dia.
           </p>
 
           <button
@@ -62,7 +62,7 @@ export default function HomePage({
 
         <div className="hero-tag">
           <span className="tag-pulse" />
-          FEITO PARA SUA VIBE
+          FEITO PARA VOCÊ
         </div>
       </section>
 
@@ -115,7 +115,7 @@ export default function HomePage({
             <span className="section-kicker">
               TOQUE E DESCUBRA
             </span>
-            <h2>Em alta agora</h2>
+            <h2>Em alta</h2>
           </div>
 
           <button

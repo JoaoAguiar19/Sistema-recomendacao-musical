@@ -46,9 +46,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid #8ab4ff; outline-
 .muted-icon { margin-left: auto; color: #77839e; }
 .main-area { margin-left: 248px; min-height: 100vh; padding-bottom: 112px; }
 .topbar { height: 76px; display: flex; align-items: center; justify-content: space-between; padding: 0 43px; border-bottom: 1px solid rgba(162,181,225,.07); }
-.history-buttons { display: flex; gap: 8px; }
-.history-buttons button { display: grid; place-items: center; width: 33px; height: 33px; border: 1px solid var(--line); border-radius: 50%; background: #111a2d; color: #9aa7c2; }
-.history-buttons button:hover { color: white; background: #1a2742; }
 .topbar-right { display: flex; align-items: center; gap: 18px; }
 .status-pill { display: flex; align-items: center; gap: 7px; color: #91a0be; font-size: 9px; font-weight: 800; letter-spacing: 1.3px; }
 .status-pill span, .eyebrow-dot { width: 6px; height: 6px; border-radius: 50%; background: #67dfc1; box-shadow: 0 0 12px #67dfc177; }
@@ -165,7 +162,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid #8ab4ff; outline-
 @media (max-width: 800px) {
   .sidebar { width: 70px; padding: 19px 9px 10px; align-items: center; }
   .brand { padding: 0; }
-  .brand > span:last-child, .nav-item:not(.active) { }
   .brand > span:last-child { display: none; }
   .brand-mark { width: 40px; height: 40px; }
   .nav-group { width: 100%; margin-top: 35px; }

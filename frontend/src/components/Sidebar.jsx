@@ -34,28 +34,28 @@ export default function Sidebar({ page, setPage, likedCount }) {
           className={page === "home" ? "nav-item active" : "nav-item"}
           onClick={() => setPage("home")}
         >
-          <Home size={19} /> Início
+          <Home size={20} /> Início
         </button>
 
         <button
           className={page === "search" ? "nav-item active" : "nav-item"}
           onClick={() => setPage("search")}
         >
-          <Search size={19} /> Buscar
+          <Search size={20} /> Buscar
         </button>
 
         <button
           className={page === "journey" ? "nav-item active" : "nav-item"}
           onClick={() => setPage("journey")}
         >
-          <Route size={19} /> Percurso musical
+          <Route size={20} /> Percurso musical
         </button>
 
         <button
           className={page === "library" ? "nav-item active" : "nav-item"}
           onClick={() => setPage("library")}
         >
-          <Library size={19} /> Sua biblioteca
+          <Library size={20} /> Sua biblioteca
         </button>
       </nav>
 
@@ -64,14 +64,14 @@ export default function Sidebar({ page, setPage, likedCount }) {
       <p className="side-label">SUA COLEÇÃO</p>
 
       <button className="nav-item" onClick={() => setPage("library")}>
-        <Plus size={19} /> Criar playlist
+        <Plus size={20} /> Criar playlist
       </button>
 
       <button
         className={page === "liked" ? "nav-item active" : "nav-item"}
         onClick={() => setPage("liked")}
       >
-        <Heart size={19} />
+        <Heart size={20} />
         Músicas curtidas
         <span className="nav-count">{likedCount}</span>
       </button>
@@ -81,11 +81,11 @@ export default function Sidebar({ page, setPage, likedCount }) {
       <p className="side-label">EXPLORAR</p>
 
       <button className="nav-item" onClick={() => setPage("search")}>
-        <Compass size={19} /> Descobrir
+        <Compass size={20} /> Descobrir
       </button>
 
       <button className="nav-item" onClick={() => setPage("search")}>
-        <Radio size={19} /> Rádios
+        <Radio size={20} /> Rádios
       </button>
 
       <div className="sidebar-bottom">

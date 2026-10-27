@@ -35,7 +35,7 @@ export default function JourneyPage() {
           PERCURSO MUSICAL
         </span>
 
-        <h1>De uma vibe a outra.</h1>
+        <h1>De uma música a outra.</h1>
 
         <p>
           Escolha onde começar e onde quer chegar.
@@ -72,7 +72,7 @@ export default function JourneyPage() {
         </div>
 
         <label htmlFor="musica-final">
-          <span>02 — Música de destino (B)</span>
+          <span>02 — Música final (B)</span>
 
           <select
             id="musica-final"
