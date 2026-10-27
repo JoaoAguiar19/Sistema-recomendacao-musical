@@ -4,7 +4,18 @@ from pydantic import BaseModel
 from src.graph.graph import construir_grafo
 from src.algoritmos.busca_astar import gerar_playlist_astar
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="Sistema de Recomendação Musical")
+
+# Habilita o CORS para o React
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 grafo_global = None
 
