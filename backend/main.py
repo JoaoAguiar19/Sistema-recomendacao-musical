@@ -1,7 +1,8 @@
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
-from src.algoritmos.grafo import construir_grafo, gerar_playlist_astar
+from src.graph.graph import construir_grafo
+from src.algoritmos.busca_astar import gerar_playlist_astar
 
 app = FastAPI(title="Sistema de Recomendação Musical")
 
