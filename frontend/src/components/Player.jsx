@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from "react";
 import {
   Heart,
   ListMusic,
@@ -20,8 +21,49 @@ export default function Player({
   liked,
   onLike,
 }) {
+
+  const [volume, setVolume] = useState(0.70);
+  const audioRef = useRef(null);
+  const volumeTrackRef = useRef(null);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [volume]);
+
+  const handleVolumeChange = (e) => {
+    if (!volumeTrackRef.current) return;
+
+    const rect = volumeTrackRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+
+    let newVolume = clickX / rect.width;
+
+    newVolume = Math.max(0, Math.min(1, newVolume));
+
+    setVolume(newVolume);
+  };
+
+  const handleMouseDown = (e) => {
+    handleVolumeChange(e);
+
+    const handleMouseMove = (e) => {
+      handleVolumeChange(e);
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
   return (
     <footer className="player">
+      <audio ref={audioRef}/>
       <div className="player-track">
         {current ? (
           <img
@@ -126,8 +168,16 @@ export default function Player({
         <ListMusic size={18} />
         <Volume2 size={19} />
 
-        <div className="volume-track">
-          <div />
+        <div 
+          className="volume-track"
+          ref={volumeTrackRef}
+          onMouseDown={handleMouseDown}
+          title={`Volume: ${Math.round(volume * 100)}%`}
+        >
+          <div
+            className="volume-fill"
+            style={{ width: `${volume * 100}%`}}
+          />
         </div>
       </div>
     </footer>

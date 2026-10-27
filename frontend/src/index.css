@@ -131,8 +131,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid #8ab4ff; outline-
 .progress-fill { height: 100%; width: 0%; border-radius: inherit; background: #819aff; }
 .animated-progress { width: 32%; transition: width 30s linear; }
 .player-volume { display: flex; align-items: center; justify-content: flex-end; gap: 13px; color: #8a97b2; }
-.volume-track { max-width: 95px; }
-.volume-track div { width: 65%; height: 100%; border-radius: inherit; background: #91a5ee; }
+.volume-track { max-width: 95px; cursor: pointer; transition: height 0.2s; display: flex; align-items: center; }
+.volume-track:hover { height: 6px; }
+.volume-fill { height: 100%; border-radius: inherit; background: #91a5ee; transition: width 0.1s ease-out; pointer-events: none; }
+/*.volume-track div { width: 65%; height: 100%; border-radius: inherit; background: #91a5ee; }*/
 .simple-page { max-width: 900px; margin: 35px auto; }
 .simple-page > h1 { margin: 0; font: 800 32px Manrope, sans-serif; letter-spacing: -1px; }
 .page-description { margin: 10px 0 25px; color: #8c9ab8; font-size: 13px; line-height: 1.6; }
