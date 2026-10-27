@@ -45,8 +45,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid #8ab4ff; outline-
 .profile span { color: #76839f; font-size: 10px; margin-top: 4px; }
 .muted-icon { margin-left: auto; color: #77839e; }
 .main-area { margin-left: 248px; min-height: 100vh; padding-bottom: 112px; }
-.topbar { height: 76px; display: flex; align-items: center; justify-content: space-between; padding: 0 43px; border-bottom: 1px solid rgba(162,181,225,.07); }
-.topbar-right { display: flex; align-items: center; gap: 18px; }
+.topbar { height: 75px; display: flex; align-items: center; justify-content: space-between; padding: 0 43px; border-bottom: 1px solid rgba(162,181,225,.07); }
+.topbar-right { display: flex; align-items: center; gap: 12px; margin-left: auto;}
 .status-pill { display: flex; align-items: center; gap: 7px; color: #91a0be; font-size: 9px; font-weight: 800; letter-spacing: 1.3px; }
 .status-pill span, .eyebrow-dot { width: 6px; height: 6px; border-radius: 50%; background: #67dfc1; box-shadow: 0 0 12px #67dfc177; }
 .profile-small { width: 31px; height: 31px; border: 2px solid #293654; font-size: 11px; }
