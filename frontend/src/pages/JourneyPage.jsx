@@ -1,17 +1,38 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowRight, Music2, Route, Search } from "lucide-react";
 
-import { tracks } from "../data/tracks";
-import "./JourneyPage.css";
 import "./JourneyPage.css";
 
 export default function JourneyPage() {
+  const [listaMusicas, setListaMusicas] = useState([]);
   const [musicaInicial, setMusicaInicial] = useState("");
   const [musicaFinal, setMusicaFinal] = useState("");
   const [mensagem, setMensagem] = useState("");
+  const [percurso, setPercurso] = useState([]);
+  const [carregando, setCarregando] = useState(false);
+  const [carregandoMusicas, setCarregandoMusicas] = useState(true);
 
-  const iniciarPercurso = () => {
+  useEffect(() => {
+    async function carregarMusicasDoBackend() {
+      try {
+        const resposta = await fetch("http://127.0.0.1:8000/musicas?limite=100");
+        if (!resposta.ok) {
+          throw new Error("Erro ao buscar faixas do servidor");
+        }
+        const dados = await resposta.json();
+        setListaMusicas(dados.musicas || []);
+      } catch (erro) {
+        console.error(erro);
+        setMensagem("Erro ao carregar a lista de músicas do backend.");
+      } finally {
+        setCarregandoMusicas(false);
+      }
+    }
+
+    carregarMusicasDoBackend();
+  }, []);
+
+  const iniciarPercurso = async () => {
     if (!musicaInicial || !musicaFinal) {
       setMensagem("Escolha as duas músicas para continuar.");
       return;
@@ -22,9 +43,39 @@ export default function JourneyPage() {
       return;
     }
 
-    setMensagem(
-      "As músicas foram selecionadas. O cálculo do percurso será conectado ao algoritmo de recomendação do back-end."
-    );
+    setMensagem("");
+    setPercurso([]);
+    setCarregando(true);
+
+    try {
+      const resposta = await fetch("http://127.0.0.1:8000/recomendar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          origem_id: musicaInicial,
+          destino_id: musicaFinal,
+        }),
+      });
+
+      if (!resposta.ok) {
+        const erroData = await resposta.json();
+        throw new Error(erroData.detail || "Erro na resposta do servidor");
+      }
+
+      const dados = await resposta.json();
+      setPercurso(dados.playlist || []);
+    } catch (erro) {
+      console.error(erro);
+      setMensagem(
+        typeof erro.message === "string"
+          ? erro.message
+          : "Falha ao calcular o percurso. Tente novamente."
+      );
+    } finally {
+      setCarregando(false);
+    }
   };
 
   return (
@@ -50,16 +101,19 @@ export default function JourneyPage() {
           <select
             id="musica-inicial"
             value={musicaInicial}
+            disabled={carregandoMusicas}
             onChange={(evento) => {
               setMusicaInicial(evento.target.value);
               setMensagem("");
             }}
           >
-            <option value="">Escolha a primeira música</option>
+            <option value="">
+              {carregandoMusicas ? "Carregando músicas do banco..." : "Escolha a primeira música"}
+            </option>
 
-            {tracks.map((musica) => (
-              <option key={musica.id} value={String(musica.id)}>
-                {musica.title} — {musica.artist}
+            {listaMusicas.map((musica) => (
+              <option key={musica.track_id} value={musica.track_id}>
+                {musica.nome} — {musica.artista}
               </option>
             ))}
           </select>
@@ -77,16 +131,19 @@ export default function JourneyPage() {
           <select
             id="musica-final"
             value={musicaFinal}
+            disabled={carregandoMusicas}
             onChange={(evento) => {
               setMusicaFinal(evento.target.value);
               setMensagem("");
             }}
           >
-            <option value="">Escolha a música de destino</option>
+            <option value="">
+              {carregandoMusicas ? "Carregando músicas do banco..." : "Escolha a música de destino"}
+            </option>
 
-            {tracks.map((musica) => (
-              <option key={musica.id} value={String(musica.id)}>
-                {musica.title} — {musica.artist}
+            {listaMusicas.map((musica) => (
+              <option key={musica.track_id} value={musica.track_id}>
+                {musica.nome} — {musica.artista}
               </option>
             ))}
           </select>
@@ -95,9 +152,10 @@ export default function JourneyPage() {
         <button
           className="journey-button"
           onClick={iniciarPercurso}
+          disabled={carregando || carregandoMusicas}
         >
           <Search size={18} />
-          Encontrar meu caminho
+          {carregando ? "Calculando caminho..." : "Encontrar meu caminho"}
         </button>
 
         {mensagem && (
@@ -106,6 +164,28 @@ export default function JourneyPage() {
           </p>
         )}
       </div>
+
+      {percurso.length > 0 && (
+        <div className="journey-result">
+          <h2>Seu Percurso Musical ({percurso.length} faixas)</h2>
+          
+          <div className="journey-playlist">
+            {percurso.map((item) => (
+              <div key={item.track_id} className="journey-embed-card">
+                <iframe
+                  title={`Spotify Player - ${item.nome}`}
+                  src={`https://open.spotify.com/embed/track/${item.track_id}?utm_source=generator&theme=0`}
+                  width="100%"
+                  height="80"
+                  frameBorder="0"
+                  allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                  loading="lazy"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="journey-info">
         <div className="journey-info-icon">
@@ -117,8 +197,7 @@ export default function JourneyPage() {
           <p>
             A proposta é conectar as músicas escolhidas por meio
             de faixas intermediárias semelhantes, evitando mudanças
-            bruscas de ritmo. O percurso real aparecerá quando o
-            algoritmo do back-end estiver integrado.
+            bruscas de ritmo.
           </p>
         </div>
       </div>
