@@ -1,14 +1,24 @@
 import os
 import numpy as np
 import pandas as pd
+import networkx as nx
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import pickle
 
-from src.graph.graph import construir_grafo
+from src.graph.graph import construir_grafo, filtrar_transicoes_bruscas
 from src.algoritmos.busca_astar import gerar_playlist_astar
+from src.algoritmos.perfis_percurso import (
+    PERFIS_PERCURSO,
+    obter_perfil,
+    serializar_perfil,
+)
+from src.algoritmos.metricas_audio import (
+    MAX_DIFERENCA_ENERGIA,
+    MAX_DIFERENCA_TEMPO,
+)
 
 app = FastAPI(title="Sistema de Recomendação Musical")
 
@@ -26,12 +36,18 @@ class RecomendacaoRequest(BaseModel):
     destino_id: str
 
 
+class RecomendacaoPerfilRequest(BaseModel):
+    percurso_id: str
+
+
 # Variáveis globais em memória RAM
 grafo_global = None
 df_completo = None
 matriz_nos_grafo = None
 ids_nos_grafo = None
 bpm_nos_grafo = None
+energia_nos_grafo = None
+nos_componente_principal = set()
 
 FEATURES_AUDIO = [
     'tempo', 'valence', 'energy', 'danceability', 'loudness',
@@ -41,7 +57,8 @@ FEATURES_AUDIO = [
 
 @app.on_event("startup")
 def startup_event():
-    global grafo_global, df_completo, matriz_nos_grafo, ids_nos_grafo, bpm_nos_grafo
+    global grafo_global, df_completo, matriz_nos_grafo, ids_nos_grafo
+    global bpm_nos_grafo, energia_nos_grafo, nos_componente_principal
     
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     
@@ -68,6 +85,15 @@ def startup_event():
         print("Arquivo de grafo pré-computado não encontrado. A gerar do zero...")
         grafo_global = construir_grafo(k_vizinhos=35, popularidade_minima=0)
 
+    arestas_antes_filtro = grafo_global.number_of_edges()
+    filtrar_transicoes_bruscas(grafo_global)
+    arestas_removidas = arestas_antes_filtro - grafo_global.number_of_edges()
+    if arestas_removidas:
+        print(f"Transições com saltos bruscos removidas: {arestas_removidas:,}.")
+    nos_componente_principal = max(
+        nx.connected_components(grafo_global), key=len, default=set()
+    )
+
     # Pré-computa matrizes NumPy dos nós do grafo para busca vetorial ultrarrápida
     ids_nos_grafo = list(grafo_global.nodes)
     matriz_nos_grafo = np.array([
@@ -76,6 +102,10 @@ def startup_event():
     ])
     bpm_nos_grafo = np.array([
         float(grafo_global.nodes[nid].get('tempo', 0.0))
+        for nid in ids_nos_grafo
+    ])
+    energia_nos_grafo = np.array([
+        float(grafo_global.nodes[nid].get('energy', 0.0))
         for nid in ids_nos_grafo
     ])
 
@@ -98,7 +128,14 @@ def obter_dados_musica_dataset(track_id: str):
 
 def encontrar_no_mais_proximo(track_id: str):
     """Encontra o nó do grafo mais parecido sonoramente usando cálculo vetorial (NumPy)."""
-    if df_completo is None or df_completo.empty or matriz_nos_grafo is None:
+    if (
+        df_completo is None
+        or df_completo.empty
+        or matriz_nos_grafo is None
+        or bpm_nos_grafo is None
+        or energia_nos_grafo is None
+        or not nos_componente_principal
+    ):
         return None
         
     musica_alvo = df_completo[df_completo['track_id'] == track_id]
@@ -108,15 +145,23 @@ def encontrar_no_mais_proximo(track_id: str):
     vetor_alvo = musica_alvo[FEATURES_AUDIO].fillna(0.0).values[0]
     bpm_alvo = float(musica_alvo['tempo'].values[0] if 'tempo' in musica_alvo else 0.0)
 
-    # Distância Euclidiana vetorizada sobre todos os 25k nós em milissegundos
+    # As características do dataset e do grafo estão normalizadas.
     distancias = np.linalg.norm(matriz_nos_grafo - vetor_alvo, axis=1)
 
-    # Aplica penalização para diferenças de BPM acima de 15.0
     diferenca_bpm = np.abs(bpm_nos_grafo - bpm_alvo)
-    penalizacao = np.where(diferenca_bpm > 15.0, 100.0, 0.0)
-    distancias_finais = distancias + penalizacao
+    energia_alvo = float(musica_alvo['energy'].values[0])
+    diferenca_energia = np.abs(energia_nos_grafo - energia_alvo)
+    nos_componentes_validos = np.isin(ids_nos_grafo, list(nos_componente_principal))
+    candidatos_validos = (
+        (diferenca_bpm <= MAX_DIFERENCA_TEMPO)
+        & (diferenca_energia <= MAX_DIFERENCA_ENERGIA)
+        & nos_componentes_validos
+    )
+    distancias_finais = np.where(candidatos_validos, distancias, np.inf)
 
     idx_melhor = np.argmin(distancias_finais)
+    if not np.isfinite(distancias_finais[idx_melhor]):
+        return None
     return ids_nos_grafo[idx_melhor]
 
 
@@ -201,6 +246,11 @@ def listar_musicas(
     return {"musicas": resultado}
 
 
+@app.get("/percursos")
+def listar_percursos():
+    return {"percursos": [serializar_perfil(perfil) for perfil in PERFIS_PERCURSO]}
+
+
 @app.post("/recomendar")
 def recomendar_playlist(request: RecomendacaoRequest):
     if not grafo_global:
@@ -220,20 +270,29 @@ def recomendar_playlist(request: RecomendacaoRequest):
         dados_musica_origem_extra = obter_dados_musica_dataset(origem_original_id)
         no_origem_grafo = encontrar_no_mais_proximo(origem_original_id)
         if not no_origem_grafo:
-            raise HTTPException(status_code=404, detail="Música inicial não encontrada no catálogo global.")
+            raise HTTPException(
+                status_code=404,
+                detail="Não foi encontrada uma faixa próxima com BPM e energia compatíveis para a música inicial.",
+            )
 
     # Trata DESTINO fora do grafo
     if destino_original_id not in grafo_global.nodes:
         dados_musica_destino_extra = obter_dados_musica_dataset(destino_original_id)
         no_destino_grafo = encontrar_no_mais_proximo(destino_original_id)
         if not no_destino_grafo:
-            raise HTTPException(status_code=404, detail="Música final não encontrada no catálogo global.")
+            raise HTTPException(
+                status_code=404,
+                detail="Não foi encontrada uma faixa próxima com BPM e energia compatíveis para a música final.",
+            )
     
     # 1. Gera a rota A* através dos nós suportados pelo grafo
     playlist_ids = gerar_playlist_astar(grafo_global, no_origem_grafo, no_destino_grafo)
     
     if not playlist_ids:
-        raise HTTPException(status_code=400, detail="Músicas incompatíveis ritmicamente. Não foi possível traçar uma rota contínua suave.")
+        raise HTTPException(
+            status_code=400,
+            detail="Não foi possível traçar uma rota com transições compatíveis de BPM e energia entre essas músicas.",
+        )
     
     resultado = []
     
@@ -256,3 +315,79 @@ def recomendar_playlist(request: RecomendacaoRequest):
         resultado.append(dados_musica_destino_extra)
         
     return {"playlist": resultado}
+
+
+@app.post("/recomendar-percurso")
+def recomendar_percurso_predefinido(request: RecomendacaoPerfilRequest):
+    if not grafo_global:
+        raise HTTPException(status_code=500, detail="O grafo ainda não foi inicializado.")
+
+    perfil = obter_perfil(request.percurso_id)
+    if perfil is None:
+        raise HTTPException(status_code=404, detail="Percurso predefinido não encontrado.")
+
+    bpm_inicial = perfil["bpm_inicial"]
+    bpm_final = perfil["bpm_final"]
+
+    def obter_candidatos(intervalo_bpm):
+        candidatos = []
+
+        for track_id, dados in grafo_global.nodes(data=True):
+            tempo = float(dados.get("tempo", 0.0) or 0.0)
+            if (
+                track_id in nos_componente_principal
+                and intervalo_bpm["min"] <= tempo <= intervalo_bpm["max"]
+            ):
+                candidatos.append(track_id)
+        return candidatos
+
+    candidatos_origem = obter_candidatos(bpm_inicial)
+    candidatos_destino = obter_candidatos(bpm_final)
+    if not candidatos_origem or not candidatos_destino:
+        raise HTTPException(
+            status_code=404,
+            detail="Não há músicas suficientes no catálogo para as faixas de BPM deste percurso.",
+        )
+
+    gerador_aleatorio = np.random.default_rng()
+    origem_id = gerador_aleatorio.choice(candidatos_origem)
+    destinos_diferentes = [
+        track_id for track_id in candidatos_destino if track_id != origem_id
+    ]
+    if not destinos_diferentes:
+        raise HTTPException(
+            status_code=404,
+            detail="Não há duas músicas diferentes dentro dos intervalos de BPM deste percurso.",
+        )
+    destino_id = gerador_aleatorio.choice(destinos_diferentes)
+    playlist_ids = gerar_playlist_astar(grafo_global, origem_id, destino_id)
+
+    if not playlist_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="Não foi possível encontrar uma rota entre as faixas selecionadas com as transições disponíveis.",
+        )
+
+    resultado = []
+    for track_id in playlist_ids:
+        dados = grafo_global.nodes[track_id]
+        resultado.append({
+            "track_id": track_id,
+            "nome": str(dados.get("track_name", "Desconhecido")),
+            "artista": str(dados.get("artists", "Desconhecido")),
+            "bpm": round(float(dados.get("tempo", 0.0) or 0.0), 3),
+        })
+
+    return {"playlist": resultado, "perfil": serializar_perfil(perfil)}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True,
+        reload_excludes=["data/*", "data/**"],
+    )

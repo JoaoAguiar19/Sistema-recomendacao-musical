@@ -12,6 +12,7 @@ buscando transições musicais coerentes de acordo com os critérios definidos.
 * **Descoberta Musical:** Permitir que o usuário escolha uma música inicial e receba recomendações de faixas para continuar a reprodução, mantendo a coerência.
 * **Transição entre duas músicas (Ponto Central):** Permitir que o usuário selecione uma música inicial (A) e uma música de destino (B). O sistema buscará o caminho mais eficiente de faixas intermediárias que conecte as duas, minimizando diferenças bruscas.
   * *Pesos Dinâmicos (Diferencial):* Ajuste da prioridade da transição (foco no ritmo, no gênero ou equilibrado).
+* **Percursos guiados por BPM:** Oferecer caminhos predefinidos que escolhem faixas inicial e final por intervalos de BPM normalizado (0 a 1). O A* minimiza o custo acumulado das transições considerando BPM, energia, estilo, harmonia e popularidade. A escolha manual das duas músicas continua disponível.
 * **Geração de playlists personalizadas:** Geração a partir de critérios próprios ou temas (ex: felicidade, tristeza), filtrando os nós do grafo.
 
 ## Ferramentas e Tecnologias

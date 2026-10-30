@@ -3,6 +3,10 @@ import networkx as nx
 import pandas as pd
 from sklearn.neighbors import NearestNeighbors
 from core.database import engine
+from src.algoritmos.metricas_audio import (
+    MAX_DIFERENCA_ENERGIA,
+    MAX_DIFERENCA_TEMPO,
+)
 
 # Atributos numéricos de áudio utilizados no vetor de estilo
 FEATURES_AUDIO = [
@@ -32,6 +36,42 @@ def _inicializar_nos_grafo(df_musicas):
     return grafo_musicas
 
 
+def _transicao_valida(musica_atual, musica_vizinha):
+    tempo_atual = float(musica_atual.get('tempo', 0.0) or 0.0)
+    tempo_vizinho = float(musica_vizinha.get('tempo', 0.0) or 0.0)
+    energia_atual = float(musica_atual.get('energy', 0.0) or 0.0)
+    energia_vizinha = float(musica_vizinha.get('energy', 0.0) or 0.0)
+    diferenca_tempo = abs(tempo_atual - tempo_vizinho)
+    diferenca_energia = abs(energia_atual - energia_vizinha)
+
+    return (
+        math.isfinite(tempo_atual)
+        and math.isfinite(tempo_vizinho)
+        and math.isfinite(energia_atual)
+        and math.isfinite(energia_vizinha)
+        and (
+            diferenca_tempo <= MAX_DIFERENCA_TEMPO
+            or math.isclose(diferenca_tempo, MAX_DIFERENCA_TEMPO)
+        )
+        and (
+            diferenca_energia <= MAX_DIFERENCA_ENERGIA
+            or math.isclose(diferenca_energia, MAX_DIFERENCA_ENERGIA)
+        )
+    )
+
+
+def filtrar_transicoes_bruscas(grafo_musicas):
+    arestas_invalidas = [
+        (origem, destino)
+        for origem, destino in grafo_musicas.edges
+        if not _transicao_valida(
+            grafo_musicas.nodes[origem], grafo_musicas.nodes[destino]
+        )
+    ]
+    grafo_musicas.remove_edges_from(arestas_invalidas)
+    return grafo_musicas
+
+
 def _conectar_vizinhos_knn(grafo_musicas, df_musicas, k_vizinhos):
     matriz_caracteristicas = df_musicas[FEATURES_AUDIO].fillna(0.0).values
     
@@ -43,25 +83,16 @@ def _conectar_vizinhos_knn(grafo_musicas, df_musicas, k_vizinhos):
 
     for i, vizinhos in enumerate(indices):
         origem_id = ids_faixas[i]
-        bpm_origem = float(df_musicas.iloc[i].get('tempo', 0.0) or 0.0)
-        energia_origem = float(df_musicas.iloc[i].get('energy', 0.0) or 0.0)
+        musica_origem = df_musicas.iloc[i]
 
         for j in range(1, len(vizinhos)):
             idx_destino = vizinhos[j]
             destino_id = ids_faixas[idx_destino]
-            
-            bpm_destino = float(df_musicas.iloc[idx_destino].get('tempo', 0.0) or 0.0)
-            energia_destino = float(df_musicas.iloc[idx_destino].get('energy', 0.0) or 0.0)
+            musica_destino = df_musicas.iloc[idx_destino]
 
-            # 🚨 REGRA DE OURO PARA TRANSIÇÃO SUAVE: 
-            # 1. Diferença máxima de 10 BPM (para não haver tropeços no ritmo)
-            # 2. Diferença máxima de 0.25 na Energia (para não saltar do calmo para o explosivo)
-            if abs(bpm_origem - bpm_destino) > 10.0:
-                continue
-            if abs(energia_origem - energia_destino) > 0.25:
+            if not _transicao_valida(musica_origem, musica_destino):
                 continue
 
-            # Adiciona a aresta se passar nos critérios de transição natural
             custo_distancia = distancias[i][j]
             grafo_musicas.add_edge(origem_id, destino_id, weight=custo_distancia)
 

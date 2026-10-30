@@ -12,26 +12,25 @@ def _calcular_custo_harmonia(node_atual, node_vizinho):
 
 
 def _calcular_custo_popularidade(node_vizinho):
-    popularidade_vizinha = float(node_vizinho.get('popularity', 50) or 50)
-    return 1.0 - (popularidade_vizinha / 100.0)
+    popularidade = node_vizinho.get('popularity')
+    popularidade_vizinha = 50.0 if popularidade is None else float(popularidade)
+    return 1.0 - (min(100.0, max(0.0, popularidade_vizinha)) / 100.0)
 
 
-def calcular_peso_aresta(grafo_musicas, musica_atual_id, musica_vizinha_id, atributos_aresta, subindo_bpm, subindo_energia):
+def calcular_peso_aresta(grafo_musicas, musica_atual_id, musica_vizinha_id, atributos_aresta):
     node_atual = grafo_musicas.nodes[musica_atual_id]
     node_vizinho = grafo_musicas.nodes[musica_vizinha_id]
 
-    custo_estilo = min(1.0, atributos_aresta.get('weight', 1.0) / 2.0)
+    custo_estilo = min(1.0, max(0.0, float(atributos_aresta.get('weight', 1.0))) / 2.0)
     
     custo_bpm = calcular_custo_bpm(
         float(node_atual.get('tempo', 0) or 0),
-        float(node_vizinho.get('tempo', 0) or 0),
-        subindo_bpm
+        float(node_vizinho.get('tempo', 0) or 0)
     )
     
     custo_energia = calcular_custo_energia(
         float(node_atual.get('energy', 0) or 0),
-        float(node_vizinho.get('energy', 0) or 0),
-        subindo_energia
+        float(node_vizinho.get('energy', 0) or 0)
     )
     
     custo_harmonia = _calcular_custo_harmonia(node_atual, node_vizinho)
