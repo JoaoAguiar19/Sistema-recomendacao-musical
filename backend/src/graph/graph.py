@@ -1,33 +1,25 @@
-import math
 import networkx as nx
 import pandas as pd
+import numpy as np
 from sklearn.neighbors import NearestNeighbors
 from core.database import engine
-from src.algoritmos.metricas_audio import (
-    MAX_DIFERENCA_ENERGIA,
-    MAX_DIFERENCA_TEMPO,
-)
 
-# Atributos numéricos de áudio utilizados no vetor de estilo
 FEATURES_AUDIO = [
     'tempo', 'valence', 'energy', 'danceability', 'loudness',
     'speechiness', 'acousticness', 'instrumentalness', 'liveness'
 ]
 
-
 def _aplicar_filtros_musicas(df_musicas, popularidade_minima):
-    # Se a coluna popularidade existir e tiver valores válidos reais, aplica de forma flexível, senão ignora
     if 'popularity' in df_musicas.columns and df_musicas['popularity'].max() > 1:
         df_musicas = df_musicas[df_musicas['popularity'] >= popularidade_minima]
-
-    # Mantemos a verificação de preview URL apenas se ela realmente existir e for obrigatória para o player
+        
+    # TRAVA DO PLAYER: Remove estritamente qualquer música que não tenha áudio de prévia
     if 'preview_url' in df_musicas.columns:
-        # Se quiseres garantir que só entram músicas com preview, podes filtrar, 
-        # mas caso contrário, removemos para não perder faixas. Vamos manter opcional:
-        pass
-
+        df_musicas = df_musicas.dropna(subset=['preview_url'])
+        # Garante que a string não está vazia
+        df_musicas = df_musicas[df_musicas['preview_url'].astype(str).str.strip() != '']
+        
     return df_musicas
-
 
 def _inicializar_nos_grafo(df_musicas):
     grafo_musicas = nx.Graph()
@@ -35,68 +27,58 @@ def _inicializar_nos_grafo(df_musicas):
         grafo_musicas.add_node(linha['track_id'], **linha.to_dict())
     return grafo_musicas
 
-
-def _transicao_valida(musica_atual, musica_vizinha):
-    tempo_atual = float(musica_atual.get('tempo', 0.0) or 0.0)
-    tempo_vizinho = float(musica_vizinha.get('tempo', 0.0) or 0.0)
-    energia_atual = float(musica_atual.get('energy', 0.0) or 0.0)
-    energia_vizinha = float(musica_vizinha.get('energy', 0.0) or 0.0)
-    diferenca_tempo = abs(tempo_atual - tempo_vizinho)
-    diferenca_energia = abs(energia_atual - energia_vizinha)
-
-    return (
-        math.isfinite(tempo_atual)
-        and math.isfinite(tempo_vizinho)
-        and math.isfinite(energia_atual)
-        and math.isfinite(energia_vizinha)
-        and (
-            diferenca_tempo <= MAX_DIFERENCA_TEMPO
-            or math.isclose(diferenca_tempo, MAX_DIFERENCA_TEMPO)
-        )
-        and (
-            diferenca_energia <= MAX_DIFERENCA_ENERGIA
-            or math.isclose(diferenca_energia, MAX_DIFERENCA_ENERGIA)
-        )
-    )
-
-
-def filtrar_transicoes_bruscas(grafo_musicas):
-    arestas_invalidas = [
-        (origem, destino)
-        for origem, destino in grafo_musicas.edges
-        if not _transicao_valida(
-            grafo_musicas.nodes[origem], grafo_musicas.nodes[destino]
-        )
-    ]
-    grafo_musicas.remove_edges_from(arestas_invalidas)
-    return grafo_musicas
-
-
 def _conectar_vizinhos_knn(grafo_musicas, df_musicas, k_vizinhos):
     matriz_caracteristicas = df_musicas[FEATURES_AUDIO].fillna(0.0).values
     
-    modelo_knn = NearestNeighbors(n_neighbors=k_vizinhos, metric='euclidean')
+    # CORREÇÃO: Mudar de k-vizinhos puros para um limite de RAIO.
+    # O radius=0.3 garante que o algoritmo NUNCA liga duas músicas se a 
+    # distância vetorial total entre elas for maior que 0.3, mesmo que 
+    # não atinja os 60 vizinhos.
+    modelo_knn = NearestNeighbors(radius=0.3, n_neighbors=k_vizinhos, metric='euclidean')
     modelo_knn.fit(matriz_caracteristicas)
     
-    distancias, indices = modelo_knn.kneighbors(matriz_caracteristicas)
+    distancias, indices = modelo_knn.radius_neighbors(matriz_caracteristicas, sort_results=True)
     ids_faixas = df_musicas['track_id'].tolist()
+
+    tempos = df_musicas['tempo'].fillna(0.0).to_numpy(dtype=float)
+    energias = df_musicas['energy'].fillna(0.0).to_numpy(dtype=float)
+    acusticas = df_musicas['acousticness'].fillna(0.0).to_numpy(dtype=float)
+    valencias = df_musicas['valence'].fillna(0.0).to_numpy(dtype=float)
 
     for i, vizinhos in enumerate(indices):
         origem_id = ids_faixas[i]
-        musica_origem = df_musicas.iloc[i]
+        bpm_origem = tempos[i]
+        energia_origem = energias[i]
+        acustica_origem = acusticas[i]
+        valencia_origem = valencias[i]
 
-        for j in range(1, len(vizinhos)):
-            idx_destino = vizinhos[j]
-            destino_id = ids_faixas[idx_destino]
-            musica_destino = df_musicas.iloc[idx_destino]
-
-            if not _transicao_valida(musica_origem, musica_destino):
+        for j_idx, vizinho_real_idx in enumerate(vizinhos):
+            # Ignora a própria música (distância 0)
+            if i == vizinho_real_idx:
                 continue
 
-            custo_distancia = distancias[i][j]
+            destino_id = ids_faixas[vizinho_real_idx]
+            
+            bpm_destino = tempos[vizinho_real_idx]
+            energia_destino = energias[vizinho_real_idx]
+            acustica_destino = acusticas[vizinho_real_idx]
+            valencia_destino = valencias[vizinho_real_idx]
+
+            # TRAVAS DE SEGURANÇA (Garante a transição gradual)
+            if abs(bpm_origem - bpm_destino) > 0.06:
+                continue
+            if abs(energia_origem - energia_destino) > 0.20:
+                continue
+            if abs(acustica_origem - acustica_destino) > 0.25:
+                continue
+            if abs(valencia_origem - valencia_destino) > 0.25:
+                continue
+
+            custo_distancia = distancias[i][j_idx]
             grafo_musicas.add_edge(origem_id, destino_id, weight=custo_distancia)
 
-def construir_grafo(k_vizinhos=35, popularidade_minima=0):
+# Aumentado os vizinhos de 35 para 60 para compensar as arestas que serão cortadas pelos filtros
+def construir_grafo(k_vizinhos=60, popularidade_minima=0):
     print("A carregar músicas da base de dados PostgreSQL...")
     df_musicas = pd.read_sql("SELECT * FROM musicas", engine)
     total_inicial = len(df_musicas)

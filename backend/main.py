@@ -8,7 +8,8 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import pickle
 
-from src.graph.graph import construir_grafo, filtrar_transicoes_bruscas
+# Repare que removemos o filtrar_transicoes_bruscas daqui
+from src.graph.graph import construir_grafo
 from src.algoritmos.busca_astar import gerar_playlist_astar
 from src.algoritmos.perfis_percurso import (
     PERFIS_PERCURSO,
@@ -83,13 +84,11 @@ def startup_event():
         print(f"Grafo carregado instantaneamente! Total de nós: {len(list(grafo_global.nodes))}")
     else:
         print("Arquivo de grafo pré-computado não encontrado. A gerar do zero...")
-        grafo_global = construir_grafo(k_vizinhos=35, popularidade_minima=0)
+        # Atualizado para 40 vizinhos por defeito
+        grafo_global = construir_grafo(k_vizinhos=40, popularidade_minima=0)
 
-    arestas_antes_filtro = grafo_global.number_of_edges()
-    filtrar_transicoes_bruscas(grafo_global)
-    arestas_removidas = arestas_antes_filtro - grafo_global.number_of_edges()
-    if arestas_removidas:
-        print(f"Transições com saltos bruscos removidas: {arestas_removidas:,}.")
+    # O bloco de filtrar_transicoes_bruscas foi completamente removido daqui.
+
     nos_componente_principal = max(
         nx.connected_components(grafo_global), key=len, default=set()
     )
@@ -132,8 +131,6 @@ def encontrar_no_mais_proximo(track_id: str):
         df_completo is None
         or df_completo.empty
         or matriz_nos_grafo is None
-        or bpm_nos_grafo is None
-        or energia_nos_grafo is None
         or not nos_componente_principal
     ):
         return None
@@ -143,27 +140,22 @@ def encontrar_no_mais_proximo(track_id: str):
         return None
 
     vetor_alvo = musica_alvo[FEATURES_AUDIO].fillna(0.0).values[0]
-    bpm_alvo = float(musica_alvo['tempo'].values[0] if 'tempo' in musica_alvo else 0.0)
 
-    # As características do dataset e do grafo estão normalizadas.
+    # Calcula a distância vetorial real
     distancias = np.linalg.norm(matriz_nos_grafo - vetor_alvo, axis=1)
 
-    diferenca_bpm = np.abs(bpm_nos_grafo - bpm_alvo)
-    energia_alvo = float(musica_alvo['energy'].values[0])
-    diferenca_energia = np.abs(energia_nos_grafo - energia_alvo)
+    # A ÚNICA regra agora é: a música de entrada tem de pertencer à ilha principal do grafo
+    # para garantir que o A* consegue chegar a qualquer outro lado.
     nos_componentes_validos = np.isin(ids_nos_grafo, list(nos_componente_principal))
-    candidatos_validos = (
-        (diferenca_bpm <= MAX_DIFERENCA_TEMPO)
-        & (diferenca_energia <= MAX_DIFERENCA_ENERGIA)
-        & nos_componentes_validos
-    )
-    distancias_finais = np.where(candidatos_validos, distancias, np.inf)
+    
+    # Mascara as distâncias de nós inválidos com infinito
+    distancias_finais = np.where(nos_componentes_validos, distancias, np.inf)
 
     idx_melhor = np.argmin(distancias_finais)
     if not np.isfinite(distancias_finais[idx_melhor]):
         return None
+        
     return ids_nos_grafo[idx_melhor]
-
 
 @app.get("/musicas")
 def listar_musicas(
@@ -210,7 +202,7 @@ def listar_musicas(
             if len(resultado) >= limite:
                 return {"musicas": resultado}
 
-    # 2. Se faltarem resultados, pesquisa no dataset completo de 1.2M (ordenado por popularidade)
+    # 2. Se faltarem resultados, pesquisa no dataset completo
     if len(resultado) < limite and not df_completo.empty:
         mascara = (
             df_completo['track_name'].astype(str).str.lower().str.contains(termo, na=False) | 
