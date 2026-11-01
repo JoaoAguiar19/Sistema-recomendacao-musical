@@ -3,7 +3,6 @@ import pandas as pd
 import joblib
 from sklearn.preprocessing import MinMaxScaler
 
-# Mapeamento dinâmico de caminhos para rodar de qualquer lugar
 DIRETORIO_ATUAL = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(DIRETORIO_ATUAL) 
 
@@ -20,15 +19,13 @@ features_audio_desejadas = [
 print("A carregar o dataset limpo...")
 df = pd.read_csv(caminho_entrada)
 
-# Garante que só tentamos normalizar as colunas que realmente vieram no dataset do Kaggle
 features_existentes = [col for col in features_audio_desejadas if col in df.columns]
-
 print(f"Métricas encontradas para normalização: {features_existentes}")
 
 # Trata valores nulos apenas nas métricas de áudio
 df[features_existentes] = df[features_existentes].fillna(0.0)
 
-# Normaliza as colunas numéricas (escala de 0 a 1) mantendo as de texto intactas
+# Normaliza as colunas numéricas ESTRITAMENTE para a escala de 0.0 a 1.0
 scaler = MinMaxScaler()
 df[features_existentes] = scaler.fit_transform(df[features_existentes])
 
