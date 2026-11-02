@@ -1,4 +1,4 @@
-import { Heart, Play, MoreHorizontal } from "lucide-react";
+import { Heart, Play, MoreHorizontal, Music2 } from "lucide-react";
 
 export default function TrackRow({
   track,
@@ -9,24 +9,27 @@ export default function TrackRow({
   liked,
   onLike,
 }) {
+  const trackId = track.id || track.track_id;
+  const isCurrent = (current?.id || current?.track_id) === trackId;
+  const trackImage = track.image || track.cover_url;
+
   return (
     <div
-      className={`track-row ${
-        current?.id === track.id ? "track-current" : ""
-      }`}
+      className={`track-row ${isCurrent ? "track-current" : ""}`}
       onDoubleClick={() => onPlay(track)}
       role="button"
       tabIndex={0}
-      onKeyDown={(event) =>
-        event.key === "Enter" && onPlay(track)
-      }
+      onKeyDown={(event) => event.key === "Enter" && onPlay(track)}
     >
       <button
         className="track-number"
-        onClick={() => onPlay(track)}
-        aria-label={`Tocar ${track.title}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onPlay(track);
+        }}
+        aria-label={`Tocar ${track.title || track.nome}`}
       >
-        {current?.id === track.id && isPlaying ? (
+        {isCurrent && isPlaying ? (
           <span className="equalizer">▮▮▮</span>
         ) : (
           <>
@@ -38,34 +41,44 @@ export default function TrackRow({
         )}
       </button>
 
-      <img
-        className="track-thumb"
-        src={track.image}
-        alt={`Capa de ${track.album}`}
-      />
+      {trackImage && trackImage !== "nan" && !trackImage.includes("placeholder") ? (
+        <img
+          className="track-thumb"
+          src={trackImage}
+          alt={`Capa de ${track.title || track.nome}`}
+        />
+      ) : (
+        <div className="track-thumb empty-thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#222', borderRadius: '4px', width: '40px', height: '40px' }}>
+          <Music2 size={18} color="#888" />
+        </div>
+      )}
 
       <div className="track-title-cell">
-        <strong>{track.title}</strong>
-        <span>{track.artist}</span>
+        <strong>{track.title || track.nome}</strong>
+        <span>{track.artist || track.artista}</span>
       </div>
 
-      <span className="track-album">{track.album}</span>
+      <span className="track-album">{track.album || "VibeStream Mix"}</span>
 
       <button
         className={`like-button ${liked ? "liked" : ""}`}
-        onClick={() => onLike(track.id)}
+        onClick={(e) => {
+          e.stopPropagation();
+          onLike(trackId);
+        }}
         aria-label={liked ? "Descurtir" : "Curtir"}
       >
-        <Heart
-          size={17}
-          fill={liked ? "currentColor" : "none"}
-        />
+        <Heart size={17} fill={liked ? "currentColor" : "none"} />
       </button>
 
-      <span className="track-time">{track.time}</span>
+      <span className="track-time">{track.time || "0:30"}</span>
 
-      <button className="more-button" aria-label="Mais opções">
-        <MoreHorizontal size={18} />
+      <button 
+        className="more-button" 
+        aria-label="Mais opções"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <MoreHorizontal size= {18} />
       </button>
     </div>
   );

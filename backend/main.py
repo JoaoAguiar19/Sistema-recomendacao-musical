@@ -7,8 +7,9 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import pickle
+import requests
+import urllib.parse
 
-# Repare que removemos o filtrar_transicoes_bruscas daqui
 from src.graph.graph import construir_grafo
 from src.algoritmos.busca_astar import gerar_playlist_astar
 from src.algoritmos.perfis_percurso import (
@@ -31,17 +32,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Modelos de Requisição (Pydantic)
 class RecomendacaoRequest(BaseModel):
     origem_id: str
     destino_id: str
 
-
 class RecomendacaoPerfilRequest(BaseModel):
     percurso_id: str
 
-
-# Variáveis globais em memória RAM
 grafo_global = None
 df_completo = None
 matriz_nos_grafo = None
@@ -63,15 +60,13 @@ def startup_event():
     
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     
-    # Define os caminhos corretos
     caminho_csv = os.path.join(BASE_DIR, 'data', 'processed', 'dataset_normalizado.csv')
     caminho_pkl = os.path.join(BASE_DIR, 'data', 'grafo_knn.pkl')
     
     print("A iniciar o servidor e a carregar o dataset completo para buscas...")
-    colunas_necessarias = ['track_id', 'track_name', 'artists', 'popularity'] + FEATURES_AUDIO
-    
+    colunas_base = ['track_id', 'track_name', 'artists', 'popularity', 'preview_url', 'cover_url'] + FEATURES_AUDIO
     try:
-        df_completo = pd.read_csv(caminho_csv, usecols=lambda c: c in colunas_necessarias)
+        df_completo = pd.read_csv(caminho_csv, usecols=lambda c: c in colunas_base)
         print(f"Dataset global carregado: {len(df_completo):,} músicas disponíveis para busca.")
     except Exception as e:
         print(f"Aviso: Não foi possível carregar o CSV completo ({e}). A busca on-demand será desativada.")
@@ -84,16 +79,12 @@ def startup_event():
         print(f"Grafo carregado instantaneamente! Total de nós: {len(list(grafo_global.nodes))}")
     else:
         print("Arquivo de grafo pré-computado não encontrado. A gerar do zero...")
-        # Atualizado para 40 vizinhos por defeito
         grafo_global = construir_grafo(k_vizinhos=40, popularidade_minima=0)
-
-    # O bloco de filtrar_transicoes_bruscas foi completamente removido daqui.
 
     nos_componente_principal = max(
         nx.connected_components(grafo_global), key=len, default=set()
     )
 
-    # Pré-computa matrizes NumPy dos nós do grafo para busca vetorial ultrarrápida
     ids_nos_grafo = list(grafo_global.nodes)
     matriz_nos_grafo = np.array([
         [float(grafo_global.nodes[nid].get(f, 0.0)) for f in FEATURES_AUDIO]
@@ -109,8 +100,46 @@ def startup_event():
     ])
 
 
+def enriquecer_local(tracks_lista):
+    """Busca capas e áudios usando a API pública do iTunes para contornar o bloqueio do Spotify."""
+    if not tracks_lista:
+        return tracks_lista
+
+    for track in tracks_lista:
+        nome = track.get('nome') or track.get('title', '')
+        artista = track.get('artista') or track.get('artist', '')
+        
+        track['preview_url'] = None 
+
+        if nome and artista and nome != 'Desconhecido':
+            try:
+                query = f"{nome} {artista}"
+                url = f"https://itunes.apple.com/search?term={urllib.parse.quote(query)}&entity=song&limit=1"
+                
+                resposta = requests.get(url, timeout=3)
+                if resposta.status_code == 200:
+                    dados = resposta.json()
+                    if dados.get('resultCount', 0) > 0:
+                        resultado = dados['results'][0]
+                        capa = resultado.get('artworkUrl100', '').replace('100x100bb', '300x300bb')
+                        preview = resultado.get('previewUrl')
+                        
+                        if capa:
+                            track['image'] = capa
+                            track['cover_url'] = capa
+                        if preview:
+                            track['preview_url'] = preview
+            except Exception:
+                pass 
+
+        if not track.get('image'):
+            track['image'] = "https://via.placeholder.com/60"
+        if not track.get('cover_url'):
+            track['cover_url'] = "https://via.placeholder.com/60"
+            
+    return tracks_lista
+
 def obter_dados_musica_dataset(track_id: str):
-    """Busca os metadados completos de uma música no dataset global para exibir no frontend."""
     if df_completo is None or df_completo.empty:
         return None
     resultado = df_completo[df_completo['track_id'] == track_id]
@@ -121,12 +150,13 @@ def obter_dados_musica_dataset(track_id: str):
         "track_id": str(linha['track_id']),
         "nome": str(linha.get('track_name', 'Desconhecido')),
         "artista": str(linha.get('artists', 'Desconhecido')),
-        "bpm": round(float(linha.get('tempo', 0)), 3)
+        "bpm": round(float(linha.get('tempo', 0)), 3),
+        "cover_url": str(linha.get('cover_url', "https://via.placeholder.com/60")),
+        "preview_url": linha.get('preview_url')
     }
 
 
 def encontrar_no_mais_proximo(track_id: str):
-    """Encontra o nó do grafo mais parecido sonoramente usando cálculo vetorial (NumPy)."""
     if (
         df_completo is None
         or df_completo.empty
@@ -140,15 +170,8 @@ def encontrar_no_mais_proximo(track_id: str):
         return None
 
     vetor_alvo = musica_alvo[FEATURES_AUDIO].fillna(0.0).values[0]
-
-    # Calcula a distância vetorial real
     distancias = np.linalg.norm(matriz_nos_grafo - vetor_alvo, axis=1)
-
-    # A ÚNICA regra agora é: a música de entrada tem de pertencer à ilha principal do grafo
-    # para garantir que o A* consegue chegar a qualquer outro lado.
     nos_componentes_validos = np.isin(ids_nos_grafo, list(nos_componente_principal))
-    
-    # Mascara as distâncias de nós inválidos com infinito
     distancias_finais = np.where(nos_componentes_validos, distancias, np.inf)
 
     idx_melhor = np.argmin(distancias_finais)
@@ -182,7 +205,6 @@ def listar_musicas(
     ids_adicionados = set()
     nomes_vistos = set()
 
-    # 1. Pesquisa primeiro no grafo K-NN (deduplicando por nome da música)
     for track_id, dados in grafo_global.nodes(data=True):
         nome = str(dados.get("track_name", ""))
         artista = str(dados.get("artists", ""))
@@ -202,7 +224,6 @@ def listar_musicas(
             if len(resultado) >= limite:
                 return {"musicas": resultado}
 
-    # 2. Se faltarem resultados, pesquisa no dataset completo
     if len(resultado) < limite and not df_completo.empty:
         mascara = (
             df_completo['track_name'].astype(str).str.lower().str.contains(termo, na=False) | 
@@ -257,56 +278,43 @@ def recomendar_playlist(request: RecomendacaoRequest):
     dados_musica_origem_extra = None
     dados_musica_destino_extra = None
 
-    # Trata ORIGEM fora do grafo
     if origem_original_id not in grafo_global.nodes:
         dados_musica_origem_extra = obter_dados_musica_dataset(origem_original_id)
         no_origem_grafo = encontrar_no_mais_proximo(origem_original_id)
         if not no_origem_grafo:
-            raise HTTPException(
-                status_code=404,
-                detail="Não foi encontrada uma faixa próxima com BPM e energia compatíveis para a música inicial.",
-            )
+            raise HTTPException(status_code=404, detail="Não foi encontrada faixa próxima para a origem.")
 
-    # Trata DESTINO fora do grafo
     if destino_original_id not in grafo_global.nodes:
         dados_musica_destino_extra = obter_dados_musica_dataset(destino_original_id)
         no_destino_grafo = encontrar_no_mais_proximo(destino_original_id)
         if not no_destino_grafo:
-            raise HTTPException(
-                status_code=404,
-                detail="Não foi encontrada uma faixa próxima com BPM e energia compatíveis para a música final.",
-            )
+            raise HTTPException(status_code=404, detail="Não foi encontrada faixa próxima para o destino.")
     
-    # 1. Gera a rota A* através dos nós suportados pelo grafo
     playlist_ids = gerar_playlist_astar(grafo_global, no_origem_grafo, no_destino_grafo)
     
     if not playlist_ids:
-        raise HTTPException(
-            status_code=400,
-            detail="Não foi possível traçar uma rota com transições compatíveis de BPM e energia entre essas músicas.",
-        )
+        raise HTTPException(status_code=400, detail="Não foi possível traçar uma rota.")
     
     resultado = []
     
-    # 2. Fixa a música original de origem no início (caso tenha vindo do dataset geral)
     if dados_musica_origem_extra:
         resultado.append(dados_musica_origem_extra)
 
-    # 3. Adiciona o caminho gerado pelo A*
     for track_id in playlist_ids:
-        dados_no = grafo_global.nodes[track_id]
+        dados = grafo_global.nodes[track_id]
         resultado.append({
             "track_id": track_id,
-            "nome": str(dados_no.get("track_name", "Desconhecido")),
-            "artista": str(dados_no.get("artists", "Desconhecido")),
-            "bpm": round(float(dados_no.get("tempo", 0)), 3)
+            "nome": str(dados.get("track_name", "Desconhecido")),
+            "artista": str(dados.get("artists", "Desconhecido")),
+            "bpm": round(float(dados.get("tempo", 0.0) or 0.0), 3),
+            "cover_url": str(dados.get("cover_url", "https://via.placeholder.com/60")),
+            "preview_url": dados.get("preview_url")
         })
         
-    # 4. Fixa a música original de destino no fim (caso tenha vindo do dataset geral)
     if dados_musica_destino_extra:
         resultado.append(dados_musica_destino_extra)
         
-    return {"playlist": resultado}
+    return {"playlist": enriquecer_local(resultado)}
 
 
 @app.post("/recomendar-percurso")
@@ -323,42 +331,29 @@ def recomendar_percurso_predefinido(request: RecomendacaoPerfilRequest):
 
     def obter_candidatos(intervalo_bpm):
         candidatos = []
-
         for track_id, dados in grafo_global.nodes(data=True):
             tempo = float(dados.get("tempo", 0.0) or 0.0)
-            if (
-                track_id in nos_componente_principal
-                and intervalo_bpm["min"] <= tempo <= intervalo_bpm["max"]
-            ):
+            if track_id in nos_componente_principal and intervalo_bpm["min"] <= tempo <= intervalo_bpm["max"]:
                 candidatos.append(track_id)
         return candidatos
 
     candidatos_origem = obter_candidatos(bpm_inicial)
     candidatos_destino = obter_candidatos(bpm_final)
     if not candidatos_origem or not candidatos_destino:
-        raise HTTPException(
-            status_code=404,
-            detail="Não há músicas suficientes no catálogo para as faixas de BPM deste percurso.",
-        )
+        raise HTTPException(status_code=404, detail="Não há músicas suficientes.")
 
     gerador_aleatorio = np.random.default_rng()
     origem_id = gerador_aleatorio.choice(candidatos_origem)
-    destinos_diferentes = [
-        track_id for track_id in candidatos_destino if track_id != origem_id
-    ]
+    destinos_diferentes = [track_id for track_id in candidatos_destino if track_id != origem_id]
+    
     if not destinos_diferentes:
-        raise HTTPException(
-            status_code=404,
-            detail="Não há duas músicas diferentes dentro dos intervalos de BPM deste percurso.",
-        )
+        raise HTTPException(status_code=404, detail="Não há duas músicas diferentes.")
+    
     destino_id = gerador_aleatorio.choice(destinos_diferentes)
     playlist_ids = gerar_playlist_astar(grafo_global, origem_id, destino_id)
 
     if not playlist_ids:
-        raise HTTPException(
-            status_code=400,
-            detail="Não foi possível encontrar uma rota entre as faixas selecionadas com as transições disponíveis.",
-        )
+        raise HTTPException(status_code=400, detail="Não foi possível encontrar uma rota.")
 
     resultado = []
     for track_id in playlist_ids:
@@ -368,9 +363,47 @@ def recomendar_percurso_predefinido(request: RecomendacaoPerfilRequest):
             "nome": str(dados.get("track_name", "Desconhecido")),
             "artista": str(dados.get("artists", "Desconhecido")),
             "bpm": round(float(dados.get("tempo", 0.0) or 0.0), 3),
+            "cover_url": str(dados.get("cover_url", "https://via.placeholder.com/60")),
+            "preview_url": dados.get("preview_url")
         })
 
-    return {"playlist": resultado, "perfil": serializar_perfil(perfil)}
+    return {"playlist": enriquecer_local(resultado), "perfil": serializar_perfil(perfil)}
+
+@app.get("/api/home/populares")
+def get_home_populares():
+    if df_completo is None or df_completo.empty:
+        return []
+
+    df_filtrado = df_completo.copy()
+    
+    if 'preview_url' in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado['preview_url'].notna() & (df_filtrado['preview_url'].astype(str).str.strip() != '')]
+        
+    if 'cover_url' in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado['cover_url'].notna() & (df_filtrado['cover_url'].astype(str).str.strip() != '')]
+    
+    if 'popularity' in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado['popularity'] > 0]
+        df_filtrado = df_filtrado.sort_values(by='popularity', ascending=False)
+
+    if 'artists' in df_filtrado.columns:
+        df_filtrado = df_filtrado.drop_duplicates(subset=['artists'], keep='first')
+
+    resultado = []
+    for _, row in df_filtrado.head(10).iterrows():
+        imagem = str(row.get('cover_url', "https://via.placeholder.com/60"))
+        if imagem == "nan" or not imagem.strip():
+             imagem = "https://via.placeholder.com/60"
+
+        resultado.append({
+            "id": str(row.get('track_id', '')),
+            "title": str(row.get('track_name', 'Desconhecido')),
+            "artist": str(row.get('artists', 'Desconhecido')),
+            "image": imagem,
+            "preview_url": row.get('preview_url')
+        })
+    
+    return enriquecer_local(resultado)
 
 
 if __name__ == "__main__":

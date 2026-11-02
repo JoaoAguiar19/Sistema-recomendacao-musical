@@ -25,18 +25,27 @@ export default function Player({
   const audioRef = useRef(null);
   const volumeTrackRef = useRef(null);
 
-  // Controla Play/Pause no elemento HTML5 nativo
   useEffect(() => {
     if (audioRef.current) {
       if (isPlaying) {
-        audioRef.current.play().catch(() => setIsPlaying(false));
+        if (current?.preview_url) {
+          const playPromise = audioRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((error) => {
+              console.error("Erro ao tocar áudio (link quebrado ou bloqueio do navegador):", error);
+              setIsPlaying(false);
+            });
+          }
+        } else {
+          // Se a música não tem áudio disponível, desativa o botão de play visualmente
+          setIsPlaying(false);
+        }
       } else {
         audioRef.current.pause();
       }
     }
   }, [isPlaying, current]);
 
-  // Ajusta o volume do áudio
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = volume;
@@ -63,9 +72,13 @@ export default function Player({
     window.addEventListener("mouseup", handleMouseUp);
   };
 
+  const currentImage = current?.image || current?.cover_url;
+  const hasValidImage = currentImage && !currentImage.includes("placeholder") && currentImage !== "nan";
+
+  console.log("Dados da música no Player:", current);
+  
   return (
     <footer className="player">
-      {/* 🚨 O evento onEnded faz a transição automática para a próxima faixa */}
       <audio 
         ref={audioRef} 
         src={current?.preview_url} 
@@ -73,15 +86,15 @@ export default function Player({
       />
 
       <div className="player-track">
-        {current ? (
+        {hasValidImage ? (
           <img
-            src={current.image || "https://via.placeholder.com/60"}
+            src={currentImage}
             alt=""
             className="player-cover"
           />
         ) : (
-          <div className="player-cover empty-cover">
-            <Music2 size={22} />
+          <div className="player-cover empty-cover" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#222', borderRadius: '4px', width: '56px', height: '56px', flexShrink: 0 }}>
+            <Music2 size={24} color="#888" />
           </div>
         )}
 
