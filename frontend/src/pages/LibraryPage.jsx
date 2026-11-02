@@ -1,12 +1,9 @@
 import { Heart } from "lucide-react";
 
 import TrackRow from "../components/TrackRow";
-import { tracks } from "../data/tracks";
 
-export default function LibraryPage({ likedIds, onPlay }) {
-  const liked = tracks.filter((track) =>
-    likedIds.includes(track.id)
-  );
+export default function LibraryPage({ likedTracks, current, isPlaying, onPlay, onLike }) {
+  const liked = [...likedTracks].reverse();
 
   return (
     <section className="simple-page">
@@ -42,11 +39,11 @@ export default function LibraryPage({ likedIds, onPlay }) {
             key={track.id}
             track={track}
             index={index}
-            current={null}
-            isPlaying={false}
+            current={current}
+            isPlaying={isPlaying}
             onPlay={onPlay}
             liked
-            onLike={() => {}}
+            onLike={onLike}
           />
         ))
       ) : (

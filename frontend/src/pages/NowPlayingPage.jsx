@@ -6,6 +6,7 @@ export default function NowPlayingPage({
   queue,
   onPlay,
   likedIds,
+  showLikedQueueSuggestions,
   onLike,
   suggestionMessage,
   setPage,
@@ -14,12 +15,15 @@ export default function NowPlayingPage({
     return <div className="now-playing-empty">Nenhuma música selecionada.</div>;
   }
 
-  const isLiked = likedIds.includes(current.id || current.track_id);
+  const isLiked = likedIds.includes(String(current.id ?? current.track_id));
   const currentImage = current.image || current.cover_url;
   const hasValidMainImage = currentImage && !currentImage.includes("placeholder") && currentImage !== "nan";
 
   const sugestoes = queue
-    .filter((t) => (t.id || t.track_id) !== (current.id || current.track_id));
+    .filter((t) =>
+      String(t.id ?? t.track_id) !== String(current.id ?? current.track_id)
+      && (showLikedQueueSuggestions || !likedIds.includes(String(t.id ?? t.track_id)))
+    );
 
   return (
     <div className="now-playing-container">
@@ -60,7 +64,7 @@ export default function NowPlayingPage({
           </div>
           
           <div className="main-track-actions">
-            <button onClick={() => onLike(current.id || current.track_id)} className="action-btn">
+            <button onClick={() => onLike(current)} className="action-btn">
               <Heart size={24} fill={isLiked ? "currentColor" : "none"} className={isLiked ? "liked" : ""} />
             </button>
             <button className="action-btn">

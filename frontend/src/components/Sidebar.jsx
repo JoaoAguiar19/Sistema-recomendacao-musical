@@ -53,7 +53,10 @@ export default function Sidebar({ page, setPage, likedCount, onOpenSearch }) {
 
       <p className="side-label">SUA COLEÇÃO</p>
 
-      <button className="nav-item" onClick={() => setPage("library")}>
+      <button
+        className={page === "playlist" ? "nav-item active" : "nav-item"}
+        onClick={() => setPage("playlist")}
+      >
         <Plus size={20} /> Criar playlist
       </button>
 

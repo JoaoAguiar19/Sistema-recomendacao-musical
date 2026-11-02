@@ -165,6 +165,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid #8ab4ff; outline-
 .search-result:last-child { border-bottom: 0; }
 .search-result:hover:not(:disabled) { background: rgba(94,121,209,.12); }
 .search-result:disabled { cursor: wait; opacity: .65; }
+.search-result-cover { display: grid; width: 44px; height: 44px; flex: 0 0 44px; place-items: center; border-radius: 6px; object-fit: cover; background: #202e52; color: #9ab0c7; }
+.search-result-cover-empty { display: grid; }
 .search-result-info { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
 .search-result-info strong, .search-result-info small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-result-info strong { color: #e6eaf6; font-size: 12px; }

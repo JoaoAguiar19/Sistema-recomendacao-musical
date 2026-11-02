@@ -138,7 +138,11 @@ export default function HomePage({
         const suggestions = await obterRecomendacoes(track.id);
         onSearchPlay(
           track,
-          suggestions.map(normalizeTrack).filter((suggestion) => suggestion.preview_url)
+          suggestions
+            .map(normalizeTrack)
+            .filter((suggestion) =>
+              suggestion.preview_url && !likedIds.includes(String(suggestion.id))
+            )
         );
       } catch (error) {
         console.error("Erro ao buscar músicas próximas:", error);
@@ -158,7 +162,11 @@ export default function HomePage({
 
   const handlePlayAndNavigate = (track) => {
     // AGORA SIM: Enviamos a faixa clicada E a lista completa de sugestões!
-    onPlay(track, tracksEmAlta);
+    const suggestions = tracksEmAlta.filter(
+      (item) => String(item.id ?? item.track_id) !== String(track.id ?? track.track_id)
+        && !likedIds.includes(String(item.id ?? item.track_id))
+    );
+    onPlay(track, [track, ...suggestions]);
     setPage("now-playing");
   };
 
@@ -184,14 +192,16 @@ export default function HomePage({
         throw new Error("Este percurso não retornou músicas.");
       }
 
-      const queue = data.playlist.filter((item) => item.preview_url).map((item) => ({
+      const queue = data.playlist
+        .filter((item) => item.preview_url && !likedIds.includes(String(item.track_id)))
+        .map((item) => ({
           id: item.track_id,
           title: item.nome,
           artist: item.artista,
           time: "0:30",
           image: item.cover_url || "https://via.placeholder.com/60",
           preview_url: item.preview_url,
-      }));
+        }));
       if (queue.length === 0) {
         throw new Error("Este percurso não possui músicas com prévia disponível.");
       }
@@ -251,6 +261,18 @@ export default function HomePage({
                     onClick={() => handleSearchTrackPlay(track)}
                     disabled={Boolean(selectingTrackId)}
                   >
+                    {normalizedTrack.image && !normalizedTrack.image.includes("placeholder") ? (
+                      <img
+                        className="search-result-cover"
+                        src={normalizedTrack.image}
+                        alt=""
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="search-result-cover search-result-cover-empty" aria-hidden="true">
+                        <Music2 size={18} />
+                      </span>
+                    )}
                     <span className="search-result-info">
                       <strong>{normalizedTrack.title}</strong>
                       <small>{normalizedTrack.artist}</small>
@@ -343,7 +365,7 @@ export default function HomePage({
                 key={track.id} track={track} index={index}
                 current={current} isPlaying={isPlaying}
                 onPlay={() => handlePlayAndNavigate(track)}
-                liked={likedIds.includes(track.id)} onLike={onLike}
+                liked={likedIds.includes(String(track.id ?? track.track_id))} onLike={onLike}
               />
             ))
           )}

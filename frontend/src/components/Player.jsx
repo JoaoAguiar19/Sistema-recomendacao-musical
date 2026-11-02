@@ -53,6 +53,7 @@ export default function Player({
     setDuration(0);
     if (audioRef.current) {
       audioRef.current.currentTime = 0;
+      audioRef.current.load();
     }
   }, [trackKey, previewUrl]);
 
@@ -270,6 +271,7 @@ export default function Player({
       <audio 
         ref={audioRef} 
         src={previewUrl || undefined}
+        preload="metadata"
         onEnded={onNext}
         onError={handleAudioError}
         onTimeUpdate={updatePlaybackTime}
@@ -300,7 +302,7 @@ export default function Player({
         {current && (
           <button
             className={`like-button player-like ${liked ? "liked" : ""}`}
-            onClick={() => onLike(current.id)}
+            onClick={() => onLike(current)}
             aria-label="Curtir música"
           >
             <Heart size={17} fill={liked ? "currentColor" : "none"} />

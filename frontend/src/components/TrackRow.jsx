@@ -64,7 +64,7 @@ export default function TrackRow({
         className={`like-button ${liked ? "liked" : ""}`}
         onClick={(e) => {
           e.stopPropagation();
-          onLike(trackId);
+          onLike(track);
         }}
         aria-label={liked ? "Descurtir" : "Curtir"}
       >

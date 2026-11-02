@@ -10,6 +10,7 @@ import pickle
 import requests
 import urllib.parse
 import unicodedata
+import re
 from concurrent.futures import ThreadPoolExecutor
 
 from src.graph.graph import construir_grafo
@@ -112,6 +113,13 @@ def enriquecer_local(tracks_lista):
         texto = unicodedata.normalize("NFKD", str(valor or "").casefold())
         return "".join(caractere for caractere in texto if caractere.isalnum())
 
+    def artistas_separados(valor):
+        return [
+            normalizar_texto(artista)
+            for artista in re.split(r";|,|&|\bfeat(?:uring)?\.?\b|\bwith\b", str(valor or ""), flags=re.IGNORECASE)
+            if normalizar_texto(artista)
+        ]
+
     def enriquecer_faixa(track):
         nome = track.get('nome') or track.get('title', '')
         artista = track.get('artista') or track.get('artist', '')
@@ -139,33 +147,34 @@ def enriquecer_local(tracks_lista):
                     dados = resposta.json()
                     resultados = dados.get('results', [])
                     nome_normalizado = normalizar_texto(nome)
-                    artista_normalizado = normalizar_texto(artista)
+                    artistas_normalizados = artistas_separados(artista)
 
                     def corresponde_a_faixa(item):
                         titulo_resultado = normalizar_texto(item.get('trackName', ''))
                         artista_resultado = normalizar_texto(item.get('artistName', ''))
+                        artista_correspondente = any(
+                            artista_resultado == artista_busca
+                            or artista_resultado in artista_busca
+                            or artista_busca in artista_resultado
+                            for artista_busca in artistas_normalizados
+                        )
                         return (
                             titulo_resultado
                             and artista_resultado
                             and nome_normalizado
-                            and artista_normalizado
+                            and artistas_normalizados
                             and (
                                 nome_normalizado == titulo_resultado
                                 or nome_normalizado in titulo_resultado
                                 or titulo_resultado in nome_normalizado
                             )
-                            and (
-                                artista_normalizado == artista_resultado
-                                or artista_normalizado in artista_resultado
-                                or artista_resultado in artista_normalizado
-                            )
+                            and artista_correspondente
                         )
 
                     resultado = next(
                         (
                             item for item in resultados
-                            if item.get('previewUrl')
-                            and corresponde_a_faixa(item)
+                            if corresponde_a_faixa(item)
                         ),
                         None,
                     )
@@ -301,7 +310,7 @@ def listar_musicas(
         })
 
     return {
-        "musicas": resultado,
+        "musicas": enriquecer_local(resultado),
         "total": total,
         "offset": offset,
         "limite": limite
