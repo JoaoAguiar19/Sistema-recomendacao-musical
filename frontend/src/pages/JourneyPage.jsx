@@ -6,11 +6,15 @@ function BuscaMusica({ label, valor, setValor, placeholder }) {
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState(false);
   const [resultados, setResultados] = useState([]);
+  const [totalResultados, setTotalResultados] = useState(0);
   const [carregandoBusca, setCarregandoBusca] = useState(false);
+  const [carregandoMais, setCarregandoMais] = useState(false);
   const debounceRef = useRef(null);
+  const buscaRequestId = useRef(0);
 
   const handleDigitacao = (e) => {
     const termo = e.target.value;
+    const requestId = ++buscaRequestId.current;
     setBusca(termo);
     setAberto(true);
     
@@ -21,6 +25,7 @@ function BuscaMusica({ label, valor, setValor, placeholder }) {
 
     if (termo.length < 2) {
       setResultados([]);
+      setTotalResultados(0);
       setCarregandoBusca(false);
       return;
     }
@@ -30,17 +35,44 @@ function BuscaMusica({ label, valor, setValor, placeholder }) {
     // Debounce de 400ms para aguardar o utilizador parar de digitar
     debounceRef.current = setTimeout(async () => {
       try {
-        const resposta = await fetch(`http://127.0.0.1:8000/musicas?busca=${encodeURIComponent(termo)}&limite=15`);
-        if (resposta.ok) {
-          const dados = await resposta.json();
+        const resposta = await fetch(
+          `http://127.0.0.1:8000/musicas?busca=${encodeURIComponent(termo)}&limite=100&offset=0`
+        );
+        if (!resposta.ok) throw new Error("Não foi possível buscar músicas.");
+        const dados = await resposta.json();
+        if (requestId === buscaRequestId.current) {
           setResultados(dados.musicas || []);
+          setTotalResultados(Number(dados.total) || 0);
         }
       } catch (erro) {
-        console.error("Erro na busca", erro);
+        if (requestId === buscaRequestId.current) {
+          console.error("Erro na busca", erro);
+        }
       } finally {
-        setCarregandoBusca(false);
+        if (requestId === buscaRequestId.current) setCarregandoBusca(false);
       }
     }, 400);
+  };
+
+  const carregarMaisResultados = async () => {
+    if (carregandoMais || resultados.length >= totalResultados) return;
+    const requestId = buscaRequestId.current;
+    try {
+      setCarregandoMais(true);
+      const resposta = await fetch(
+        `http://127.0.0.1:8000/musicas?busca=${encodeURIComponent(busca)}&limite=100&offset=${resultados.length}`
+      );
+      if (!resposta.ok) throw new Error("Não foi possível carregar mais músicas.");
+      const dados = await resposta.json();
+      if (requestId === buscaRequestId.current) {
+        setResultados((atuais) => [...atuais, ...(dados.musicas || [])]);
+        setTotalResultados(Number(dados.total) || 0);
+      }
+    } catch (erro) {
+      if (requestId === buscaRequestId.current) console.error("Erro ao carregar músicas", erro);
+    } finally {
+      setCarregandoMais(false);
+    }
   };
 
   return (
@@ -74,26 +106,41 @@ function BuscaMusica({ label, valor, setValor, placeholder }) {
             ) : resultados.length === 0 ? (
               <li style={{ padding: "14px", textAlign: "center", color: "#a7aec5" }}>Nenhuma faixa encontrada.</li>
             ) : (
-              resultados.map((m) => (
-                <li
-                  key={m.track_id}
-                  onClick={() => {
-                    setValor(m.track_id);
-                    setBusca(`${m.nome} — ${m.artista}`);
-                    setAberto(false);
-                  }}
-                  style={{ padding: "12px 16px", cursor: "pointer", borderBottom: "1px solid #252e49", color: "#f4f5ff" }}
-                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#202a48"}
-                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                >
-                  <strong>{m.nome}</strong> <span style={{ color: "#a7aec5", fontSize: "13px" }}>— {m.artista}</span>
-                  {!m.no_grafo && (
-                    <span style={{ marginLeft: "8px", fontSize: "10px", backgroundColor: "#303a5a", padding: "2px 6px", borderRadius: "4px" }}>
-                      Busca Expandida
-                    </span>
-                  )}
-                </li>
-              ))
+              <>
+                {resultados.map((m) => (
+                  <li
+                    key={m.track_id}
+                    onClick={() => {
+                      setValor(m.track_id);
+                      setBusca(`${m.nome} — ${m.artista}`);
+                      setAberto(false);
+                    }}
+                    style={{ padding: "12px 16px", cursor: "pointer", borderBottom: "1px solid #252e49", color: "#f4f5ff" }}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#202a48"}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                  >
+                    <strong>{m.nome}</strong> <span style={{ color: "#a7aec5", fontSize: "13px" }}>— {m.artista}</span>
+                    {!m.no_grafo && (
+                      <span style={{ marginLeft: "8px", fontSize: "10px", backgroundColor: "#303a5a", padding: "2px 6px", borderRadius: "4px" }}>
+                        Busca Expandida
+                      </span>
+                    )}
+                  </li>
+                ))}
+                {resultados.length < totalResultados && (
+                  <li style={{ padding: "8px", textAlign: "center" }}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={carregarMaisResultados}
+                      disabled={carregandoMais}
+                      style={{ border: 0, background: "transparent", color: "#a7aec5", cursor: "pointer", font: "inherit" }}
+                    >
+                      {carregandoMais ? "Carregando..." : "Carregar mais músicas"}
+                    </button>
+                  </li>
+                )}
+              </>
             )}
           </ul>
         )}

@@ -50,24 +50,28 @@ export const mixes = [
   {
     title: "Seu mix diário",
     subtitle: "Um pouco de tudo que você ama",
+    percursoId: "ondas-suaves",
     image:
       "https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=600&q=85",
   },
   {
     title: "Foco total",
     subtitle: "Sons para entrar no ritmo",
+    percursoId: "ganhar-ritmo",
     image:
       "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=600&q=85",
   },
   {
     title: "Vibe tranquila",
     subtitle: "Diminua o ritmo e respire",
+    percursoId: "desacelerar",
     image:
       "https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=600&q=85",
   },
   {
     title: "Descobertas",
     subtitle: "Novos sons para sua coleção",
+    percursoId: "energia-crescente",
     image:
       "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=600&q=85",
   },

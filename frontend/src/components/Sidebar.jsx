@@ -1,18 +1,15 @@
 
 import {
   Home,
-  Search,
   Library,
   Heart,
   Plus,
-  Compass,
-  Radio,
   MoreHorizontal,
   Music2,
   Route,
 } from "lucide-react";
 
-export default function Sidebar({ page, setPage, likedCount }) {
+export default function Sidebar({ page, setPage, likedCount, onOpenSearch }) {
   return (
     <aside className="sidebar">
       <button
@@ -35,13 +32,6 @@ export default function Sidebar({ page, setPage, likedCount }) {
           onClick={() => setPage("home")}
         >
           <Home size={20} /> Início
-        </button>
-
-        <button
-          className={page === "search" ? "nav-item active" : "nav-item"}
-          onClick={() => setPage("search")}
-        >
-          <Search size={20} /> Buscar
         </button>
 
         <button
@@ -74,18 +64,6 @@ export default function Sidebar({ page, setPage, likedCount }) {
         <Heart size={20} />
         Músicas curtidas
         <span className="nav-count">{likedCount}</span>
-      </button>
-
-      <div className="sidebar-divider" />
-
-      <p className="side-label">EXPLORAR</p>
-
-      <button className="nav-item" onClick={() => setPage("search")}>
-        <Compass size={20} /> Descobrir
-      </button>
-
-      <button className="nav-item" onClick={() => setPage("search")}>
-        <Radio size={20} /> Rádios
       </button>
 
       <div className="sidebar-bottom">

@@ -9,9 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 import pickle
 import requests
 import urllib.parse
+import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 
 from src.graph.graph import construir_grafo
 from src.algoritmos.busca_astar import gerar_playlist_astar
+from src.algoritmos.custos_trajeto import calcular_peso_aresta
 from src.algoritmos.perfis_percurso import (
     PERFIS_PERCURSO,
     obter_perfil,
@@ -105,23 +108,69 @@ def enriquecer_local(tracks_lista):
     if not tracks_lista:
         return tracks_lista
 
-    for track in tracks_lista:
+    def normalizar_texto(valor):
+        texto = unicodedata.normalize("NFKD", str(valor or "").casefold())
+        return "".join(caractere for caractere in texto if caractere.isalnum())
+
+    def enriquecer_faixa(track):
         nome = track.get('nome') or track.get('title', '')
         artista = track.get('artista') or track.get('artist', '')
-        
-        track['preview_url'] = None 
 
-        if nome and artista and nome != 'Desconhecido':
+        preview_url = track.get('preview_url')
+        if not isinstance(preview_url, str) or not preview_url.startswith(("http://", "https://")):
+            track['preview_url'] = None
+
+        cover_url = track.get('cover_url')
+        if not isinstance(cover_url, str) or not cover_url.startswith(("http://", "https://")):
+            track['cover_url'] = None
+        if not track.get('image') and track.get('cover_url'):
+            track['image'] = track['cover_url']
+
+        if (
+            (not track.get('preview_url') or not track.get('cover_url'))
+            and nome and artista and nome != 'Desconhecido'
+        ):
             try:
                 query = f"{nome} {artista}"
-                url = f"https://itunes.apple.com/search?term={urllib.parse.quote(query)}&entity=song&limit=1"
+                url = f"https://itunes.apple.com/search?term={urllib.parse.quote(query)}&entity=song&limit=5"
                 
                 resposta = requests.get(url, timeout=3)
                 if resposta.status_code == 200:
                     dados = resposta.json()
-                    if dados.get('resultCount', 0) > 0:
-                        resultado = dados['results'][0]
-                        capa = resultado.get('artworkUrl100', '').replace('100x100bb', '300x300bb')
+                    resultados = dados.get('results', [])
+                    nome_normalizado = normalizar_texto(nome)
+                    artista_normalizado = normalizar_texto(artista)
+
+                    def corresponde_a_faixa(item):
+                        titulo_resultado = normalizar_texto(item.get('trackName', ''))
+                        artista_resultado = normalizar_texto(item.get('artistName', ''))
+                        return (
+                            titulo_resultado
+                            and artista_resultado
+                            and nome_normalizado
+                            and artista_normalizado
+                            and (
+                                nome_normalizado == titulo_resultado
+                                or nome_normalizado in titulo_resultado
+                                or titulo_resultado in nome_normalizado
+                            )
+                            and (
+                                artista_normalizado == artista_resultado
+                                or artista_normalizado in artista_resultado
+                                or artista_resultado in artista_normalizado
+                            )
+                        )
+
+                    resultado = next(
+                        (
+                            item for item in resultados
+                            if item.get('previewUrl')
+                            and corresponde_a_faixa(item)
+                        ),
+                        None,
+                    )
+                    if resultado:
+                        capa = (resultado.get('artworkUrl100') or '').replace('100x100bb', '300x300bb')
                         preview = resultado.get('previewUrl')
                         
                         if capa:
@@ -129,15 +178,30 @@ def enriquecer_local(tracks_lista):
                             track['cover_url'] = capa
                         if preview:
                             track['preview_url'] = preview
-            except Exception:
-                pass 
+            except (requests.RequestException, ValueError, TypeError):
+                pass
 
+        if not track.get('image') and track.get('cover_url'):
+            track['image'] = track['cover_url']
         if not track.get('image'):
             track['image'] = "https://via.placeholder.com/60"
         if not track.get('cover_url'):
             track['cover_url'] = "https://via.placeholder.com/60"
-            
-    return tracks_lista
+
+        return track
+
+    with ThreadPoolExecutor(max_workers=min(8, len(tracks_lista))) as executor:
+        return list(executor.map(enriquecer_faixa, tracks_lista))
+
+
+def enriquecer_com_previa(tracks_lista):
+    """Resolve previews where possible and omit tracks that cannot be played."""
+    return [
+        track for track in enriquecer_local(tracks_lista)
+        if isinstance(track.get("preview_url"), str)
+        and track["preview_url"].startswith(("http://", "https://"))
+    ]
+
 
 def obter_dados_musica_dataset(track_id: str):
     if df_completo is None or df_completo.empty:
@@ -182,13 +246,13 @@ def encontrar_no_mais_proximo(track_id: str):
 
 @app.get("/musicas")
 def listar_musicas(
-    limite: int = Query(default=15, ge=1, le=100),
+    limite: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     busca: Optional[str] = Query(default=None, description="Filtra por nome da música ou artista")
 ):
-    if not grafo_global:
-        raise HTTPException(status_code=500, detail="O grafo ainda não foi inicializado.")
-
     if not busca:
+        if not grafo_global:
+            raise HTTPException(status_code=500, detail="O grafo ainda não foi inicializado.")
         resultado = []
         for track_id, dados in list(grafo_global.nodes(data=True))[:limite]:
             resultado.append({
@@ -196,67 +260,52 @@ def listar_musicas(
                 "nome": str(dados.get("track_name", "")),
                 "artista": str(dados.get("artists", "")),
                 "bpm": round(float(dados.get("tempo", 0)), 3),
+                "cover_url": dados.get("cover_url"),
+                "preview_url": dados.get("preview_url"),
                 "no_grafo": True
             })
-        return {"musicas": resultado}
+        return {"musicas": enriquecer_local(resultado)}
 
-    termo = busca.lower()
+    if df_completo is None or df_completo.empty:
+        raise HTTPException(status_code=503, detail="O catálogo de músicas ainda não foi carregado.")
+
+    termo = busca.strip().casefold()
+    if not termo:
+        return {"musicas": [], "total": 0, "offset": offset, "limite": limite}
+
+    mascara = (
+        df_completo['track_name'].astype(str).str.casefold().str.contains(termo, regex=False, na=False)
+        | df_completo['artists'].astype(str).str.casefold().str.contains(termo, regex=False, na=False)
+    )
+    df_filtrado = df_completo[mascara]
+    if 'popularity' in df_filtrado.columns:
+        df_filtrado = df_filtrado.sort_values(by='popularity', ascending=False, kind='stable')
+    df_filtrado = df_filtrado.drop_duplicates(subset=['track_id'], keep='first')
+    total = len(df_filtrado)
+    pagina = df_filtrado.iloc[offset:offset + limite]
+
     resultado = []
-    ids_adicionados = set()
-    nomes_vistos = set()
+    ids_grafo = set(grafo_global.nodes) if grafo_global is not None else set()
+    for _, row in pagina.iterrows():
+        preview_url = row.get('preview_url')
+        cover_url = row.get('cover_url')
+        bpm = row.get('tempo', 0)
+        resultado.append({
+            "track_id": str(row['track_id']),
+            "nome": str(row.get('track_name', 'Desconhecido')),
+            "artista": str(row.get('artists', 'Desconhecido')),
+            "bpm": round(float(bpm), 3) if pd.notna(bpm) else 0,
+            "cover_url": cover_url if isinstance(cover_url, str) and cover_url.startswith(("http://", "https://")) else None,
+            "preview_url": preview_url if isinstance(preview_url, str) and preview_url.startswith(("http://", "https://")) else None,
+            "no_grafo": str(row['track_id']) in ids_grafo
+        })
 
-    for track_id, dados in grafo_global.nodes(data=True):
-        nome = str(dados.get("track_name", ""))
-        artista = str(dados.get("artists", ""))
-        nome_chave = nome.lower().strip()
-
-        if (termo in nome.lower() or termo in artista.lower()) and nome_chave not in nomes_vistos:
-            resultado.append({
-                "track_id": track_id,
-                "nome": nome,
-                "artista": artista,
-                "bpm": round(float(dados.get("tempo", 0)), 3),
-                "no_grafo": True
-            })
-            ids_adicionados.add(track_id)
-            nomes_vistos.add(nome_chave)
-            
-            if len(resultado) >= limite:
-                return {"musicas": resultado}
-
-    if len(resultado) < limite and not df_completo.empty:
-        mascara = (
-            df_completo['track_name'].astype(str).str.lower().str.contains(termo, na=False) | 
-            df_completo['artists'].astype(str).str.lower().str.contains(termo, na=False)
-        )
-        
-        if 'popularity' in df_completo.columns:
-            df_filtrado = df_completo[mascara].sort_values(by='popularity', ascending=False)
-        else:
-            df_filtrado = df_completo[mascara]
-            
-        df_filtrado = df_filtrado.drop_duplicates(subset=['track_name'], keep='first')
-
-        for _, row in df_filtrado.iterrows():
-            track_id = str(row['track_id'])
-            nome = str(row.get('track_name', 'Desconhecido'))
-            nome_chave = nome.lower().strip()
-
-            if track_id not in ids_adicionados and nome_chave not in nomes_vistos:
-                resultado.append({
-                    "track_id": track_id,
-                    "nome": nome,
-                    "artista": str(row.get('artists', 'Desconhecido')),
-                    "bpm": round(float(row.get('tempo', 0)), 3),
-                    "no_grafo": False
-                })
-                ids_adicionados.add(track_id)
-                nomes_vistos.add(nome_chave)
-
-            if len(resultado) >= limite:
-                break
-
-    return {"musicas": resultado}
+    return {
+        "musicas": resultado,
+        "total": total,
+        "offset": offset,
+        "limite": limite
+    }
 
 
 @app.get("/percursos")
@@ -314,7 +363,10 @@ def recomendar_playlist(request: RecomendacaoRequest):
     if dados_musica_destino_extra:
         resultado.append(dados_musica_destino_extra)
         
-    return {"playlist": enriquecer_local(resultado)}
+    playlist_com_previa = enriquecer_com_previa(resultado)
+    if not playlist_com_previa:
+        raise HTTPException(status_code=404, detail="Não há músicas com prévia disponível nesta rota.")
+    return {"playlist": playlist_com_previa}
 
 
 @app.post("/recomendar-percurso")
@@ -367,7 +419,66 @@ def recomendar_percurso_predefinido(request: RecomendacaoPerfilRequest):
             "preview_url": dados.get("preview_url")
         })
 
-    return {"playlist": enriquecer_local(resultado), "perfil": serializar_perfil(perfil)}
+    playlist_com_previa = enriquecer_com_previa(resultado)
+    if not playlist_com_previa:
+        raise HTTPException(status_code=404, detail="Este percurso não encontrou músicas com prévia disponível.")
+    return {"playlist": playlist_com_previa, "perfil": serializar_perfil(perfil)}
+
+
+@app.get("/recomendacoes/{track_id}")
+def recomendar_musicas_proximas(
+    track_id: str,
+    limite: int = Query(default=8, ge=1, le=20),
+):
+    if not grafo_global:
+        raise HTTPException(status_code=500, detail="O grafo ainda não foi inicializado.")
+
+    no_origem = track_id
+    if no_origem not in grafo_global.nodes:
+        if obter_dados_musica_dataset(track_id) is None:
+            raise HTTPException(status_code=404, detail="A música selecionada não foi encontrada.")
+        no_origem = encontrar_no_mais_proximo(track_id)
+        if no_origem is None:
+            raise HTTPException(status_code=404, detail="Não foi encontrada uma música próxima no grafo.")
+
+    vizinhos = sorted(
+        (
+            (
+                vizinho_id,
+                calcular_peso_aresta(grafo_global, no_origem, vizinho_id, atributos_aresta),
+            )
+            for vizinho_id, atributos_aresta in grafo_global[no_origem].items()
+        ),
+        key=lambda item: item[1],
+    )
+
+    musicas = []
+    for vizinho_id, _ in vizinhos:
+        dados = grafo_global.nodes[vizinho_id]
+        musicas.append({
+            "track_id": str(vizinho_id),
+            "nome": str(dados.get("track_name", "Desconhecido")),
+            "artista": str(dados.get("artists", "Desconhecido")),
+            "bpm": round(float(dados.get("tempo", 0.0) or 0.0), 3),
+            "cover_url": str(dados.get("cover_url", "https://via.placeholder.com/60")),
+            "preview_url": dados.get("preview_url"),
+        })
+
+    musicas_com_previa = []
+    for inicio in range(0, len(musicas), limite):
+        musicas_com_previa.extend(
+            enriquecer_com_previa(musicas[inicio:inicio + limite])
+        )
+        if len(musicas_com_previa) >= limite:
+            break
+    return {"musicas": musicas_com_previa[:limite]}
+
+
+@app.get("/preview")
+def obter_previa(nome: str = Query(..., min_length=1), artista: str = Query(..., min_length=1)):
+    faixa = enriquecer_local([{"nome": nome, "artista": artista}])[0]
+    return {"preview_url": faixa.get("preview_url")}
+
 
 @app.get("/api/home/populares")
 def get_home_populares():
@@ -375,12 +486,6 @@ def get_home_populares():
         return []
 
     df_filtrado = df_completo.copy()
-    
-    if 'preview_url' in df_filtrado.columns:
-        df_filtrado = df_filtrado[df_filtrado['preview_url'].notna() & (df_filtrado['preview_url'].astype(str).str.strip() != '')]
-        
-    if 'cover_url' in df_filtrado.columns:
-        df_filtrado = df_filtrado[df_filtrado['cover_url'].notna() & (df_filtrado['cover_url'].astype(str).str.strip() != '')]
     
     if 'popularity' in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado['popularity'] > 0]
@@ -403,7 +508,7 @@ def get_home_populares():
             "preview_url": row.get('preview_url')
         })
     
-    return enriquecer_local(resultado)
+    return enriquecer_com_previa(resultado)
 
 
 if __name__ == "__main__":

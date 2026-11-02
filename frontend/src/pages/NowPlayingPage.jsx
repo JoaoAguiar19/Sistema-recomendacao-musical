@@ -1,7 +1,15 @@
 import { Heart, MoreHorizontal, ListMusic, ChevronLeft, ChevronRight, Music2 } from "lucide-react";
 import "./NowPlayingPage.css";
 
-export default function NowPlayingPage({ current, queue, onPlay, likedIds, onLike, setPage }) {
+export default function NowPlayingPage({
+  current,
+  queue,
+  onPlay,
+  likedIds,
+  onLike,
+  suggestionMessage,
+  setPage,
+}) {
   if (!current) {
     return <div className="now-playing-empty">Nenhuma música selecionada.</div>;
   }
@@ -11,8 +19,7 @@ export default function NowPlayingPage({ current, queue, onPlay, likedIds, onLik
   const hasValidMainImage = currentImage && !currentImage.includes("placeholder") && currentImage !== "nan";
 
   const sugestoes = queue
-    .filter((t) => (t.id || t.track_id) !== (current.id || current.track_id))
-    .slice(0, 5);
+    .filter((t) => (t.id || t.track_id) !== (current.id || current.track_id));
 
   return (
     <div className="now-playing-container">
@@ -78,7 +85,11 @@ export default function NowPlayingPage({ current, queue, onPlay, likedIds, onLik
         <p className="sidebar-subtitle">Sugeridas</p>
 
         <div className="suggested-list">
-          {sugestoes.map((track) => {
+          {suggestionMessage ? (
+            <p className="suggestion-message" role="status">{suggestionMessage}</p>
+          ) : sugestoes.length === 0 ? (
+            <p className="suggestion-message">Ainda não há sugestões para esta faixa.</p>
+          ) : sugestoes.map((track) => {
             const trackImage = track.image || track.cover_url;
             const hasValidTrackImage = trackImage && !trackImage.includes("placeholder") && trackImage !== "nan";
             const trackTitle = track.title || track.track_name || track.nome;

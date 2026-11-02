@@ -162,6 +162,7 @@
 }
 .suggested-list::-webkit-scrollbar { width: 6px; }
 .suggested-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+.suggestion-message { margin: 0; padding: 14px 10px; color: #9ab0c7; font-size: 0.85rem; line-height: 1.6; }
 
 .suggested-item {
   display: flex;
