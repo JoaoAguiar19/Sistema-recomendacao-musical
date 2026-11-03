@@ -343,7 +343,8 @@ export default function HomePage({
                 key={track.id} track={track} index={index}
                 current={current} isPlaying={isPlaying}
                 onPlay={() => handlePlayAndNavigate(track)}
-                liked={likedIds.includes(track.id)} onLike={onLike}
+                liked={likedIds.some((id) => String(id) === String(track.id ?? track.track_id))}
+                onLike={onLike}
               />
             ))
           )}

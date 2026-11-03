@@ -300,8 +300,8 @@ export default function Player({
         {current && (
           <button
             className={`like-button player-like ${liked ? "liked" : ""}`}
-            onClick={() => onLike(current.id)}
-            aria-label="Curtir música"
+            onClick={() => onLike(current)}
+            aria-label={liked ? "Descurtir música" : "Curtir música"}
           >
             <Heart size={17} fill={liked ? "currentColor" : "none"} />
           </button>
