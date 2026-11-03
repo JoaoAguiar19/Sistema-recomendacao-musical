@@ -3,3 +3,17 @@ __pycache__/
 *.pyc
 .env
 venv/
+data/raw/*.csv
+data/processed/*.csv
+data/reports/*.csv
+
+data/
+.cache
+*.pkl
+data/
+.cache
+*.pkl
+data/
+.cache
+*.pkl
+*.csv
