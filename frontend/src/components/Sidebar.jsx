@@ -22,7 +22,7 @@ export default function Sidebar({ page, setPage, likedCount, onOpenSearch }) {
         </span>
 
         <span>
-          Vibe<span className="brand-light">Stream</span>
+          Music<span className="brand-light">Graph</span>
         </span>
       </button>
 
