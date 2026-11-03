@@ -9,8 +9,8 @@ export default function TrackRow({
   liked,
   onLike,
 }) {
-  const trackId = track.id || track.track_id;
-  const isCurrent = (current?.id || current?.track_id) === trackId;
+  const trackId = track.id ?? track.track_id;
+  const isCurrent = String(current?.id ?? current?.track_id) === String(trackId);
   const trackImage = track.image || track.cover_url;
 
   return (
@@ -64,7 +64,7 @@ export default function TrackRow({
         className={`like-button ${liked ? "liked" : ""}`}
         onClick={(e) => {
           e.stopPropagation();
-          onLike(trackId);
+          onLike(track);
         }}
         aria-label={liked ? "Descurtir" : "Curtir"}
       >

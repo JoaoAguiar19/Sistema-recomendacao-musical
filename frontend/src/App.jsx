@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import "./App.css";
 
@@ -7,6 +7,7 @@ import Player from "./components/Player";
 
 import HomePage from "./pages/HomePage";
 import LibraryPage from "./pages/LibraryPage";
+import CreatePlaylistPage from "./pages/CreatePlaylistPage";
 import JourneyPage from "./pages/JourneyPage";
 import NowPlayingPage from "./pages/NowPlayingPage";
 
@@ -18,8 +19,29 @@ export default function App() {
   const [current, setCurrent] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [suggestionMessage, setSuggestionMessage] = useState("");
-  const [likedIds, setLikedIds] = useState([3]);
+  const [likedTracks, setLikedTracks] = useState(() => {
+    try {
+      const savedTracks = JSON.parse(localStorage.getItem("likedTracks") || "[]");
+      return Array.isArray(savedTracks)
+        ? savedTracks.filter(
+            (track) => track && (track.id != null || track.track_id != null)
+          )
+        : [];
+    } catch (error) {
+      console.error("Não foi possível carregar as músicas favoritas.", error);
+      return [];
+    }
+  });
+  const likedIds = likedTracks.map((track) => track.id ?? track.track_id);
   const [queue, setQueue] = useState(defaultTracks);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("likedTracks", JSON.stringify(likedTracks));
+    } catch (error) {
+      console.error("Não foi possível salvar as músicas favoritas.", error);
+    }
+  }, [likedTracks]);
 
   const playTrack = (track, newQueue = null) => {
     if (!track) return;
@@ -73,18 +95,42 @@ export default function App() {
     setPage("now-playing");
   };
 
-  const toggleLike = (id) => {
-    setLikedIds((ids) =>
-      ids.includes(id)
-        ? ids.filter((likedId) => likedId !== id)
-        : [...ids, id]
-    );
+  const playLikedTrack = (track) => {
+    if (!track || !likedTracks.length) return;
+    setQueue(likedTracks);
+    setCurrent(track);
+    setIsPlaying(true);
+    setSuggestionMessage("");
+    setPage("now-playing");
+  };
+
+  const toggleLike = (trackOrId) => {
+    const track = typeof trackOrId === "object" && trackOrId !== null
+      ? trackOrId
+      : [...queue, ...defaultTracks].find(
+          (item) => String(item.id ?? item.track_id) === String(trackOrId)
+        );
+    const trackId = track?.id ?? track?.track_id;
+    if (trackId == null) return;
+
+    setLikedTracks((savedTracks) => {
+      const alreadyLiked = savedTracks.some(
+        (savedTrack) => String(savedTrack.id ?? savedTrack.track_id) === String(trackId)
+      );
+      return alreadyLiked
+        ? savedTracks.filter(
+            (savedTrack) => String(savedTrack.id ?? savedTrack.track_id) !== String(trackId)
+          )
+        : [...savedTracks, track];
+    });
   };
 
   const stepTrack = (direction) => {
     if (!queue.length) return;
     const index = queue.findIndex(
-      (track) => (track.id || track.track_id) === (current?.id || current?.track_id)
+      (track) =>
+        String(track.id ?? track.track_id) ===
+        String(current?.id ?? current?.track_id)
     );
     const nextIndex = index + direction;
     if (nextIndex >= 0 && nextIndex < queue.length) {
@@ -140,8 +186,17 @@ export default function App() {
           )}
 
           {(page === "library" || page === "liked") && (
-            <LibraryPage likedIds={likedIds} onPlay={(t) => playTrack(t, defaultTracks)} onLike={toggleLike} />
+            <LibraryPage
+              likedTracks={likedTracks}
+              likedIds={likedIds}
+              current={current}
+              isPlaying={isPlaying}
+              onPlay={playLikedTrack}
+              onLike={toggleLike}
+            />
           )}
+
+          {page === "create-playlist" && <CreatePlaylistPage />}
 
           {page === "now-playing" && (
             <NowPlayingPage
@@ -163,8 +218,12 @@ export default function App() {
         setIsPlaying={setIsPlaying}
         onNext={() => stepTrack(1)}
         onPrevious={() => stepTrack(-1)}
-        liked={current ? likedIds.includes(current.id || current.track_id) : false}
-        onLike={toggleLike}
+        liked={current
+          ? likedIds.some(
+              (id) => String(id) === String(current.id ?? current.track_id)
+            )
+          : false}
+        onLike={() => current && toggleLike(current)}
       />
     </div>
   );
